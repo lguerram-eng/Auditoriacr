@@ -424,7 +424,7 @@ header(ws, DH, ["Banco", "Nº obligación (cliente)", "ID auditoría", "Tipo", "
 r = DH + 1
 D_FIRST = r
 for bank, num, ident, rr in det:
-    tipo = "Leasing" if "-L" in ident else "Crédito"
+    tipo = "Leasing" if ("-L" in ident or ident.startswith("N/A")) else "Crédito"
     vals = [bank, num, ident, tipo, rr[2], rr[3], rr[4], rr[5], rr[6], rr[7], rr[8], rr[9], rr[10] or 0,
             rr[11] or 0, rr[12], rr[13], rr[14]]
     for c, v in enumerate(vals, start=1):
@@ -736,6 +736,192 @@ for arch, con, ident, fc, can, capc, intc, seg, ea, fup, vup in DOCS_DAV:
     r += 1
 ws.freeze_panes = "F5"
 
+# -*- coding: utf-8 -*-
+# Bloque insertado en build_cruce_62.py antes de "6. CRUCE DETALLE VS MAYOR".
+# Construye: Mayor_Dic25 (detalle del mayor al 31-dic-25 tomado del PT 2025) y Saldos_x_Obligacion.
+
+# ============================================================================ 5b. MAYOR AL 31-DIC-2025 (PT 2025)
+F_EJ = f"{UP}/e6eb8aed-ejemplo.xlsx"
+ej = openpyxl.load_workbook(F_EJ, data_only=True).active
+
+L4 = {"0624": "DAV-830624", "7691": "DAV-607691", "8906": "DAV-8906", "9032": "DAV-569032", "5867": "BCL-1260105867",
+      "7259": "BOG-858177259", "1275": "DAV-L1021275", "5005": "BOG-L557285005", "9064": "BOG-L556449064",
+      "9117": "BOG-L556449117", "9180": "BOG-L556449180", "9224": "BOG-L556449224", "9288": "BOG-L556449288",
+      "0629": "BOG-856670629", "9940": "POP-631309940", "4476": "BBVA-0141", "2095": "BCL-L362095"}
+
+
+def id_dic25(fila, aux, terc, nota, doc):
+    nota = str(nota or "")
+    doc = str(doc or "")
+    if aux.startswith("2105020103"):
+        return "TC"
+    if aux.startswith("2130"):
+        m = re.search(r"(?:CRED|LEAS)[- ]?(\d{4})", nota)
+        return L4.get(m.group(1), "SIN-ID") if m else "SIN-ID"
+    rules = [("1260105867", "BCL-1260105867"), ("858906", "DAV-8906"), ("9600277262", "BBVA-0141"),
+             ("Obf.158009", "BOG-453436746"), ("858177259", "BOG-858177259"), ("830624", "BOG-X"),
+             ("856670629", "BOG-856670629"), ("POPULAR", "POP-631309940"), ("336817", "BCL-L336817"),
+             ("TURBOKRAFT", "BCL-L336817"), ("331330", "BCL-L331330"), ("1019441", "DAV-L1019441"),
+             ("1019448", "DAV-L1019448"), ("362095", "BCL-L362095"), ("CALDERAS JCT", "DAV-L1021275"),
+             ("GECOLSA", "DAV-LGECOLSA"), ("556449064", "BOG-L556449064"), ("556449117", "BOG-L556449117"),
+             ("556449180", "BOG-L556449180"), ("556449224", "BOG-L556449224"), ("556449288", "BOG-L556449288"),
+             ("557285005", "BOG-L557285005")]
+    for pat, ident in rules:
+        if pat in nota:
+            return "DAV-830624" if ident == "BOG-X" else ident
+    if doc.endswith("569032"):
+        return "DAV-569032"
+    if doc.endswith("607691"):
+        return "DAV-607691"
+    if doc in ("53436746",):
+        return "BOG-453436746"
+    if doc in ("85817725",):
+        return "BOG-858177259"
+    if "RECLASIFICACION SALDO DE LARGO" in nota:  # mapeo del PT 2025 (E289 incluye I68; E290 incluye I69)
+        return {68: "BOG-453436746", 69: "BOG-856670629"}.get(fila, "SIN-ID")
+    return "SIN-ID"
+
+
+AUX2026 = {"2105020103": "21050301"}
+ws = ws_new("Mayor_Dic25", "Detalle del mayor por obligación al 31-dic-2025 (saldo inicial 2026)",
+            "Fuente: ejemplo.xlsx (PT Obligaciones Financieras al 31-dic-2025, sección 2 'Detalle suministrado por Cliente'). ID asignado por auditoría según la nota y el documento cruce.",
+            [8, 12, 13, 12, 26, 11, 17, 62, 12, 18, 22])
+header(ws, 4, ["Fila PT 2025", "Auxiliar 2025", "Cuenta 2026", "NIT", "Razón social", "Fecha docto.", "Total COP (crédito +)",
+               "Notas", "Doc. cruce", "ID obligación", "Clase"])
+r = 5
+MD_FIRST = r
+for fila in range(68, 264):
+    aux = ej.cell(fila, 4).value
+    if aux is None:
+        continue
+    aux = str(aux)
+    terc, nota, doc = ej.cell(fila, 7).value, ej.cell(fila, 10).value, ej.cell(fila, 11).value
+    ident = id_dic25(fila, aux, terc, nota, doc)
+    cta = AUX2026.get(aux, aux)
+    vals = [fila, aux, cta, ej.cell(fila, 6).value, terc, ej.cell(fila, 8).value, ej.cell(fila, 9).value, nota, str(doc), ident,
+            CLASE.get(cta, "Otra")]
+    for c, v in enumerate(vals, start=1):
+        put(ws, r, c, v, font=f_bold if c == 10 else f_in, fmt=NUM if c == 7 else (DATE if c == 6 else None))
+    r += 1
+MD_LAST = r - 1
+put(ws, r, 5, "TOTAL", bold=True, fill=fill_tot)
+put(ws, r, 7, f"=SUM(G{MD_FIRST}:G{MD_LAST})", fmt=NUM, bold=True, fill=fill_tot)
+r += 2
+section(ws, r, "Cuadre del detalle 31-dic-25 contra el saldo inicial del balance 2026", 11)
+r += 1
+header(ws, r, ["", "Cuenta", "", "", "Descripción", "", "Detalle 31-dic-25", "Saldo inicial balance (signo +)", "Diferencia"])
+r += 1
+for a in LEAF:
+    put(ws, r, 2, a, font=f_in)
+    put(ws, r, 5, BA[a][0])
+    put(ws, r, 7, f"=SUMIFS($G${MD_FIRST}:$G${MD_LAST},$C${MD_FIRST}:$C${MD_LAST},B{r})", fmt=NUM)
+    put(ws, r, 8, f"=-{BAL(a, 'SI')}", fmt=NUM)
+    put(ws, r, 9, f"=G{r}-H{r}", fmt=NUM)
+    r += 1
+put(ws, r, 5, "Partidas sin ID de obligación", bold=True)
+put(ws, r, 7, f'=COUNTIF($J${MD_FIRST}:$J${MD_LAST},"SIN-ID")', fmt=NUM0)
+ws.freeze_panes = "B5"
+
+
+def MD(col):
+    return f"Mayor_Dic25!${col}${MD_FIRST}:${col}${MD_LAST}"
+
+
+# ============================================================================ 5c. SALDOS POR OBLIGACIÓN
+EXT_DIC25 = {  # 'Valor Extracto' del PT al 31-dic-2025 (ejemplo.xlsx, sección 3)
+    "DAV-8906": 10000000000, "DAV-569032": 2999996571.59, "DAV-830624": 7499998630.82, "DAV-607691": 3959998705.37,
+    "DAV-L1019441": 481870906, "DAV-L1019448": 393351698, "DAV-L1021275": 1876684264,
+    "BOG-453436746": 3374999979, "BOG-856670629": "=2003833327.94-182166667", "BOG-858177259": 1375000000,
+    "BOG-L556449224": 459771024, "BOG-L556449180": 459771024, "BOG-L556449117": 331775059, "BOG-L556449064": 331775059,
+    "BOG-L556449288": 459866292, "BOG-L557285005": 1170839109, "POP-631309940": 575000000, "BBVA-0141": 4700000000,
+    "BCL-1260105867": 5000000000, "BCL-L362095": 495530373, "BCL-L336817": 849599858, "BCL-L331330": 605798177,
+    "BOG-1159383796": 0,
+}
+SX_IDS = [("BANCO DAVIVIENDA", ["DAV-8906", "DAV-569032", "DAV-830624", "DAV-607691", "DAV-L1019441", "DAV-L1019448",
+                                "DAV-L1021275", "DAV-LGECOLSA"]),
+          ("BANCO DE BOGOTA", ["BOG-453436746", "BOG-856670629", "BOG-858177259", "BOG-1159383796", "BOG-L556449224",
+                               "BOG-L556449180", "BOG-L556449117", "BOG-L556449064", "BOG-L556449288", "BOG-L557285005"]),
+          ("BANCO POPULAR", ["POP-631309940"]), ("BBVA", ["BBVA-0141"]),
+          ("BANCOLOMBIA S.A.", ["BCL-1260105867", "BCL-L362095", "BCL-L336817", "BCL-L331330", "BCL-L386735"]),
+          ("PARTIDAS AJENAS EN 2120 (neto cero)", ["N/A-COMISION", "N/A-CRUCE"])]
+SX_DESC = {"DAV-8906": "Crédito tesorería 457300748906 (cancelado 28-ene-26)", "DAV-LGECOLSA": "Leasing 2 motogeneradores GECOLSA (no está en detalle 62)",
+           "BCL-L386735": "Leasing 386735 camión VW Constellation (nuevo 28-jul-26)", "BOG-1159383796": "Crédito 1155297469 → prorrogado 1159383796",
+           "N/A-COMISION": "Comisiones Valley Trading registradas y reclasificadas en 21202040", "N/A-CRUCE": "NI-4731 cruce anticipo calderas en 21202140"}
+ws = ws_new("Saldos_x_Obligacion", "Saldos de capital por obligación al 31-jul-2026 – mayor vs detalle 62 vs tabla de amortización vs banco",
+            "Saldo mayor = detalle 31-dic-25 (PT 2025) + créditos 2026 − débitos 2026 (Mayor_Mov). Saldo banco = certificado jul-26; si no hay, extracto 31-dic-25 + movimientos 2026 (estimado, marca [E]).",
+            [17, 15, 8, 34, 17, 16, 16, 17, 17, 17, 17, 17, 22, 15, 15, 15, 15, 30])
+header(ws, 4, ["ID auditoría", "Banco", "Tipo", "Descripción", "Saldo mayor 31-dic-25", "Créditos 2026 (desembolsos)",
+               "Débitos 2026 (pagos)", "Saldo mayor 31-jul-26", "Saldo detalle 62", "Saldo tabla amortización 31-jul",
+               "Extracto 31-dic-25 (PT 2025)", "Saldo banco 31-jul-26", "Fuente saldo banco", "Mayor − detalle 62",
+               "Mayor − banco", "Detalle 62 − banco", "Tabla − banco", "Conclusión"], height=48)
+r = 5
+SX_FIRST = r
+SX_ROW = {}
+CAPC = ("21050100", "21050201", "21202040", "21202140")
+for bank_, ids in SX_IDS:
+    for ident in ids:
+        tipo = "Leasing" if ("-L" in ident or ident.startswith("N/A")) else "Crédito"
+        meta = next((d for d in det if d[2] == ident), None)
+        put(ws, r, 1, ident, font=f_bold)
+        put(ws, r, 2, bank_, font=f_in)
+        put(ws, r, 3, tipo)
+        put(ws, r, 4, SX_DESC.get(ident, f"{meta[1]} – {meta[3][2]}" if meta else ""), font=f_in)
+        put(ws, r, 5, f'=SUMIFS({MD("G")},{MD("J")},A{r},{MD("C")},"<>2130*",{MD("C")},"<>21050301")', fmt=NUM)
+        put(ws, r, 6, "=" + "+".join(f'SUMIFS({R_CRE},{R_ID},$A{r},{R_CTA},"{a}")' for a in CAPC), fmt=NUM)
+        put(ws, r, 7, "=" + "+".join(f'SUMIFS({R_DEB},{R_ID},$A{r},{R_CTA},"{a}")' for a in CAPC), fmt=NUM)
+        put(ws, r, 8, f"=E{r}+F{r}-G{r}", fmt=NUM)
+        put(ws, r, 9, f"=SUMIFS({DR('F')},{DR('C')},A{r})", fmt=NUM)
+        put(ws, r, 10, f'=IFERROR(INDEX(Rev_Tablas_Amort!$N:$N,MATCH(A{r},Rev_Tablas_Amort!$A:$A,0)),"Sin tabla")', fmt=NUM)
+        ext = EXT_DIC25.get(ident)
+        put(ws, r, 11, ext if ext is not None else "N/D", font=f_in, fmt=NUM)
+        if ident in CERT_ROW and CERTS[[c[3] for c in CERTS].index(ident)][6] is not None:
+            put(ws, r, 12, f"=Certificados!J{CERT_ROW[ident]}", fmt=NUM)
+            put(ws, r, 13, "[C] Certificado / extracto 2026")
+        else:
+            put(ws, r, 12, f'=IF(ISNUMBER(K{r}),K{r}+F{r}-G{r},"N/D")', fmt=NUM)
+            put(ws, r, 13, f'=IF(ISNUMBER(K{r}),"[E] Extracto dic-25 + mov. 2026","[P] Sin soporte bancario")')
+        put(ws, r, 14, f"=H{r}-I{r}", fmt=NUM)
+        put(ws, r, 15, f'=IF(ISNUMBER(L{r}),H{r}-L{r},"N/D")', fmt=NUM)
+        put(ws, r, 16, f'=IF(ISNUMBER(L{r}),I{r}-L{r},"N/D")', fmt=NUM)
+        put(ws, r, 17, f'=IF(AND(ISNUMBER(J{r}),ISNUMBER(L{r})),J{r}-L{r},"N/D")', fmt=NUM)
+        put(ws, r, 18, f'=IF(NOT(ISNUMBER(L{r})),"Pendiente soporte bancario",IF(ABS(O{r})<=Resumen!$C$6,'
+                       f'IF(ABS(N{r})<=Resumen!$C$6,"OK","Mayor OK – detalle 62 desactualizado"),"Diferencia mayor vs banco"))', wrap=True)
+        SX_ROW[ident] = r
+        r += 1
+SX_LAST = r - 1
+
+
+def SX(col):
+    return f"Saldos_x_Obligacion!${col}${SX_FIRST}:${col}${SX_LAST}"
+
+
+for tp, accts in (("Crédito", ("21050100", "21050201")), ("Leasing", ("21202040", "21202140"))):
+    put(ws, r, 1, f"TOTAL {tp.upper()}", bold=True, fill=fill_tot)
+    for c in range(5, 18):
+        if c in (11, 13, 18):
+            continue
+        L = get_column_letter(c)
+        put(ws, r, c, f'=SUMIFS({L}{SX_FIRST}:{L}{SX_LAST},$C${SX_FIRST}:$C${SX_LAST},"{tp}")', fmt=NUM, bold=True, fill=fill_tot)
+    r += 1
+    put(ws, r, 1, f"Balance {tp} (signo +)")
+    put(ws, r, 5, f"=-({BAL(accts[0], 'SI')}+{BAL(accts[1], 'SI')})", fmt=NUM)
+    put(ws, r, 6, f"={BAL(accts[0], 'C')}+{BAL(accts[1], 'C')}", fmt=NUM)
+    put(ws, r, 7, f"={BAL(accts[0], 'D')}+{BAL(accts[1], 'D')}", fmt=NUM)
+    put(ws, r, 8, f"=-({BAL(accts[0], 'SF')}+{BAL(accts[1], 'SF')})", fmt=NUM)
+    r += 1
+    put(ws, r, 1, "Diferencia (por obligación − balance)")
+    for c in (5, 6, 7, 8):
+        L = get_column_letter(c)
+        put(ws, r, c, f"={L}{r - 2}-{L}{r - 1}", fmt=NUM, fill=fill_key)
+    if tp == "Crédito":
+        SX_CRED = (r - 2, r)
+    else:
+        SX_LEAS = (r - 2, r)
+    r += 2
+put(ws, r, 1, "Nota: [C] cotejado con certificado/extracto 2026; [E] estimado con el extracto al 31-dic-25 del PT 2025 más los movimientos de capital 2026 del mayor (supone que el banco aplicó los mismos abonos); [P] sin soporte bancario.",
+    font=f_sub, border=False)
+ws.freeze_panes = "E5"
+
 # ============================================================================ 6. CRUCE DETALLE VS MAYOR
 ws = ws_new("Cruce_Detalle_Mayor", "Cruce detalle 62 vs mayor (cuentas 2105 y 2120) – Integridad y exactitud",
             "Saldos del mayor tomados del balance con signo invertido (pasivo positivo). Movimientos de capital por obligación desde Mayor_Mov.",
@@ -760,45 +946,55 @@ put(ws, 9, 1, "Comprobación: total detalle = 'Total Obligaciones' del cliente")
 put(ws, 9, 4, f"=Detalle_62!F{D_TOT}-D8", fmt=NUM)
 put(ws, 10, 1, "Tarjetas de crédito (21050301) e intereses por pagar (2130) no forman parte del detalle 62.", font=f_sub, border=False)
 
-put(ws, 12, 1, "B. Explicación de la diferencia en leasing (mayor − detalle)", font=f_sec, border=False)
+put(ws, 12, 1, "B. Explicación de la diferencia en leasing (mayor − detalle) por obligación – ver Saldos_x_Obligacion", font=f_sec, border=False)
 header(ws, 13, ["Partida", "", "", "", "", "Valor", "", "", "Soporte"])
-put(ws, 14, 1, "1. Leasing Bancolombia 386735 (camión VW Constellation) registrado en mayor el 28-jul-26 y omitido en el detalle 62", wrap=True)
-ws.merge_cells("A14:E14")
-put(ws, 14, 6, f'=SUMIFS({R_CRE},{R_ID},"BCL-L386735")-SUMIFS({R_DEB},{R_ID},"BCL-L386735")', fmt=NUM)
-put(ws, 14, 9, "NB-00001014: Cr 21202040 $572.363.196 + Cr 21202140 $103.474.304.", wrap=True)
-put(ws, 15, 1, "2. Leasings Banco de Bogotá: saldo según extractos mayor que el detalle 62 (detalle desactualizado)", wrap=True)
-ws.merge_cells("A15:E15")
-put(ws, 15, 6, f"=-{C_BOGL}", fmt=NUM)
-put(ws, 15, 9, "Hoja Certificados, sección A (6 contratos).", wrap=True)
-put(ws, 16, 1, "3. Diferencia residual no explicada – leasings Davivienda y Bancolombia sin extracto de saldo", wrap=True)
-ws.merge_cells("A16:E16")
-put(ws, 16, 6, "=F7-F14-F15", fmt=NUM, fill=fill_key)
-put(ws, 16, 9, "Requiere certificados de saldo de los contratos 1019441, 1019448, 1021275 (Davivienda) y 362095, 336817, 331330 (Bancolombia).", wrap=True)
-put(ws, 17, 1, "Total diferencia leasing", bold=True, fill=fill_tot)
-put(ws, 17, 6, "=SUM(F14:F16)", fmt=NUM, bold=True, fill=fill_tot)
-put(ws, 17, 7, '=IF(ABS(F17-F7)<0.01,"Cuadra","Revisar")')
-for rr_ in (14, 15, 16):
+SXN = lambda pat: f'SUMIFS({SX("N")},{SX("A")},"{pat}")'
+EXPL = [
+    ("1. Leasing Bancolombia 386735 (camión VW Constellation) registrado el 28-jul-26 y omitido en el detalle 62", "=" + SXN("BCL-L386735"),
+     "NB-00001014: Cr 21202040 $572.363.196 + Cr 21202140 $103.474.304."),
+    ("2. Leasing Davivienda GECOLSA (2 motogeneradores) en el mayor desde jul-25 y omitido en el detalle 62 (tampoco validado en el PT 2025)", "=" + SXN("DAV-LGECOLSA"),
+     "Mayor_Dic25: reintegro anticipo GECOLSA, doc. 2672, $213.861.900."),
+    ("3. Leasings Banco de Bogotá: el mayor coincide con los certificados; el detalle 62 trae saldos de tablas teóricas", "=" + SXN("BOG-L*"),
+     "Saldos_x_Obligacion: Mayor − banco ≈ 0 en los 6 contratos."),
+    ("4. Leasings Davivienda 1019441, 1019448 y 1021275: detalle 62 = tabla teórica; mayor = extracto dic-25 − pagos 2026", "=" + SXN("DAV-L1*"),
+     "1021275: la tabla capitaliza intereses; banco mantiene $1.876.684.264."),
+    ("5. Leasings Bancolombia 362095, 336817 y 331330: detalle 62 desactualizado (362095 con saldo de dic-25)", f'={SXN("BCL-L362095")}+{SXN("BCL-L336817")}+{SXN("BCL-L331330")}',
+     "Ver Rev_Tablas_Amort (error en tabla 362095)."),
+]
+for k, (lab, f_, sop) in enumerate(EXPL):
+    rr_ = 14 + k
+    put(ws, rr_, 1, lab, wrap=True)
+    ws.merge_cells(start_row=rr_, start_column=1, end_row=rr_, end_column=5)
+    put(ws, rr_, 6, f_, fmt=NUM)
+    put(ws, rr_, 9, sop, wrap=True)
     ws.row_dimensions[rr_].height = 30
+put(ws, 19, 1, "6. Diferencia residual no explicada", wrap=True)
+ws.merge_cells("A19:E19")
+put(ws, 19, 6, "=F7-SUM(F14:F18)", fmt=NUM, fill=fill_key)
+put(ws, 20, 1, "Total diferencia leasing", bold=True, fill=fill_tot)
+put(ws, 20, 6, "=SUM(F14:F19)", fmt=NUM, bold=True, fill=fill_tot)
+put(ws, 20, 7, '=IF(ABS(F20-F7)<0.01,"Cuadra","Revisar")')
 
-put(ws, 19, 1, "C. Roll-forward de capital por obligación (detalle 62 + movimiento ene–jul) → saldo inicial implícito al 1-ene-26", font=f_sec, border=False)
-header(ws, 20, ["ID auditoría", "Banco", "Tipo", "Saldo detalle 62 (31-jul)", "Pagos de capital (débitos)",
+put(ws, 22, 1, "C. Roll-forward de capital por obligación (detalle 62 + movimiento ene–jul) → saldo inicial implícito al 1-ene-26", font=f_sec, border=False)
+header(ws, 23, ["ID auditoría", "Banco", "Tipo", "Saldo detalle 62 (31-jul)", "Pagos de capital (débitos)",
                 "Desembolsos / renovaciones (créditos)", "Saldo inicial implícito 1-ene", "En detalle 62?", "Comentario"])
-RF_IDS = [d[2] for d in det] + ["DAV-8906", "BCL-L386735", "N/A-COMISION", "N/A-CRUCE"]
+RF_IDS = [d[2] for d in det] + ["DAV-8906", "BCL-L386735", "DAV-LGECOLSA", "N/A-COMISION", "N/A-CRUCE"]
 RF_COM = {
     "DAV-8906": "Crédito Davivienda $10.000 MM cancelado el 28-ene-26 con el crédito Bogotá 1155297469 (refinanciación con otro banco: baja en cuentas NIIF 9.3.3.1).",
     "BCL-L386735": "Leasing nuevo 28-jul-26 no incluido en el detalle 62 → saldo inicial implícito negativo = omisión.",
+    "DAV-LGECOLSA": "Leasing GECOLSA: sin movimiento 2026 y fuera del detalle 62; su saldo ($213,9 MM) está en el saldo inicial del mayor.",
     "N/A-COMISION": "Comisiones Valley Trading registradas y reclasificadas en 21202040 (neto 0). Partida ajena a obligaciones.",
     "N/A-CRUCE": "NI-4731 'cruce anticipo calderas' en 21202140 Davivienda (neto 0). Partida ajena a obligaciones.",
     "BOG-1159383796": "Incluye el crédito 1155297469 (desembolso 28-ene) y su prórroga al 1159383796 (29-jul).",
     "BBVA-0141": "Renovación 30-jun-26 (CE-35090) a la par. El detalle 62 lo identifica como 252059; el mayor como 9600290141/0141 (y 4476 en ene–mar).",
     "BCL-1260105867": "Mayor glosa '12660105867' (error de digitación).",
 }
-r = 21
+r = 24
 RF_FIRST = r
 CAP_ACCTS = ("21050100", "21050201", "21202040", "21202140")
 for ident in RF_IDS:
     meta = next((d for d in det if d[2] == ident), None)
-    bk = meta[0] if meta else {"DAV-8906": "BANCO DAVIVIENDA", "BCL-L386735": "BANCOLOMBIA S.A."}.get(ident, "N/A")
+    bk = meta[0] if meta else {"DAV-8906": "BANCO DAVIVIENDA", "BCL-L386735": "BANCOLOMBIA S.A.", "DAV-LGECOLSA": "BANCO DAVIVIENDA"}.get(ident, "N/A")
     tp = "Leasing" if ("-L" in ident or ident.startswith("N/A")) else "Crédito"
     put(ws, r, 1, ident, font=f_bold)
     put(ws, r, 2, bk, font=f_in)
@@ -827,7 +1023,7 @@ for tp, accts_si in (("Crédito", ("21050100", "21050201")), ("Leasing", ("21202
         L = get_column_letter(c)
         put(ws, r, c, f"={L}{r - 2}-{L}{r - 1}", fmt=NUM, fill=fill_key if c == 7 else None)
     r += 2
-ws.freeze_panes = "B21"
+ws.freeze_panes = "B24"
 
 # ============================================================================ 7. RECÁLCULO DE INTERESES
 ws = ws_new("Recalculo_Intereses", "Recálculo de intereses (NIIF 9 – costo amortizado, método del interés efectivo)",
@@ -906,6 +1102,7 @@ r += 1
 P2_FIRST = r
 cap_cert = lambda i: f"=Certificados!J{CERT_ROW[i]}"
 cap_det = lambda i: f"=SUMIFS({DR('F')},{DR('C')},\"{i}\")"
+cap_bank = lambda i: f"=Saldos_x_Obligacion!L{SX_ROW[i]}"
 ea_det = lambda i: f"=INDEX({DR('J')},MATCH(\"{i}\",{DR('C')},0))"
 P2 = [
     ("DAV-830624", "Certificado", cap_cert("DAV-830624"), 0.1551, dt.date(2026, 3, 21), 365,
@@ -925,20 +1122,20 @@ P2 = [
      "Inicio estimado 17-jun (cuotas trimestrales al 17; vence 17-dic-26). Pago registrado 30-jun con intereses de mora $54.242."),
     ("BCL-1260105867", "Certificado", cap_cert("BCL-1260105867"), 0.1417, dt.date(2026, 7, 22), 365,
      "El banco certifica $24.607.407 causados del 22-jul al 11-ago (ver Parte 1)."),
-    ("DAV-L1021275", "Detalle 62 / tasa extracto", cap_det("DAV-L1021275"), 0.1441, dt.date(2026, 7, 23), 365, ""),
-    ("DAV-L1019441", "Detalle 62 / tasa extracto", cap_det("DAV-L1019441"), 0.1603, dt.date(2026, 7, 13), 365, ""),
-    ("DAV-L1019448", "Detalle 62 / tasa extracto", cap_det("DAV-L1019448"), 0.1593, dt.date(2026, 7, 6), 365, ""),
+    ("DAV-L1021275", "Banco [E] / tasa extracto", cap_bank("DAV-L1021275"), 0.1441, dt.date(2026, 7, 23), 365, ""),
+    ("DAV-L1019441", "Banco [E] / tasa extracto", cap_bank("DAV-L1019441"), 0.1603, dt.date(2026, 7, 13), 365, ""),
+    ("DAV-L1019448", "Banco [E] / tasa extracto", cap_bank("DAV-L1019448"), 0.1593, dt.date(2026, 7, 6), 365, ""),
     ("BOG-L557285005", "Certificado", cap_cert("BOG-L557285005"), 0.1604, dt.date(2026, 7, 22), 365, ""),
     ("BOG-L556449064", "Certificado", cap_cert("BOG-L556449064"), 0.1425, dt.date(2026, 7, 27), 365, ""),
     ("BOG-L556449117", "Certificado", cap_cert("BOG-L556449117"), 0.1425, dt.date(2026, 7, 27), 365, ""),
     ("BOG-L556449180", "Certificado", cap_cert("BOG-L556449180"), 0.1422, dt.date(2026, 7, 23), 365, ""),
     ("BOG-L556449224", "Certificado", cap_cert("BOG-L556449224"), 0.1422, dt.date(2026, 7, 23), 365, ""),
     ("BOG-L556449288", "Certificado", cap_cert("BOG-L556449288"), 0.1422, dt.date(2026, 7, 20), 365, ""),
-    ("BCL-L362095", "Detalle 62 (sin certificado)", cap_det("BCL-L362095"), ea_det("BCL-L362095"), dt.date(2026, 6, 30), 365,
+    ("BCL-L362095", "Banco [E] / tasa detalle 62", cap_bank("BCL-L362095"), ea_det("BCL-L362095"), dt.date(2026, 6, 30), 365,
      "Inicio según periodo 'ABR-MAY-JUN' del CL-414. Confirmar fechas de canon con Bancolombia (vencimientos al día 14)."),
-    ("BCL-L336817", "Detalle 62 (sin certificado)", cap_det("BCL-L336817"), ea_det("BCL-L336817"), dt.date(2026, 7, 19), 365,
+    ("BCL-L336817", "Banco [E] / tasa detalle 62", cap_bank("BCL-L336817"), ea_det("BCL-L336817"), dt.date(2026, 7, 19), 365,
      "Inicio = fecha del último canon registrado (CL-421)."),
-    ("BCL-L331330", "Detalle 62 (sin certificado)", cap_det("BCL-L331330"), ea_det("BCL-L331330"), dt.date(2026, 7, 9), 365,
+    ("BCL-L331330", "Banco [E] / tasa detalle 62", cap_bank("BCL-L331330"), ea_det("BCL-L331330"), dt.date(2026, 7, 9), 365,
      "Inicio = fecha del último canon registrado (CL-420)."),
     ("BCL-L386735", "Mayor (no está en detalle 62)", f'=SUMIFS({R_CRE},{R_ID},"BCL-L386735")',
      f"=(1+({RATE_CELL['IBR 3 MESES']}+0.0135)/4)^4-1", dt.date(2026, 7, 28), 365, "IBR TV + 1,35 según glosa NB-1014."),
@@ -1027,6 +1224,336 @@ for rr_, ident in DOCS_ROWS:  # comparación diferida en Certificados sección D
     put(CERT_WS, rr_, 15, f'=IF(G{rr_}=Recalculo_Intereses!I{p3},"Sí","NO")')
 ws.freeze_panes = "C6"
 
+# -*- coding: utf-8 -*-
+# Bloque insertado en build_cruce_62.py después de "7. RECÁLCULO DE INTERESES".
+# Construye: anexos A01..Ann (tabla del cliente vs recálculo), Rev_Tablas_Amort, Int_Glosas e Intereses_x_Obligacion.
+import importlib.util as _ilu
+
+_spec = _ilu.spec_from_file_location("pta", __file__.rsplit("/", 1)[0] + "/parse_tablas_amort.py")
+_pta = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_pta)
+F_TAB = f"{UP}/89656b61-64._Tabla_amortizaci_n_obligaciones_financieras.xlsm"
+TAB = _pta.parse(F_TAB)
+
+ANX_ORDER = ["DAV-L1019441", "DAV-L1019448", "DAV-L1021275", "DAV-830624", "DAV-607691", "DAV-569032",
+             "BOG-453436746", "BOG-856670629", "BOG-858177259", "BOG-1155297469", "BOG-1159383796",
+             "BOG-L556449224", "BOG-L556449180", "BOG-L556449117", "BOG-L556449064", "BOG-L556449288", "BOG-L557285005",
+             "POP-631309940", "BBVA-9600277262", "BCL-1260105867", "BCL-L362095", "BCL-L336817", "BCL-L331330",
+             "DYP-482800190700", "DAV-L1013934"]
+TAB_ID_SX = {"BOG-1159383796": "BOG-1159383796"}  # ID de la tabla -> ID de saldo (mismo salvo excepciones)
+OBS_T = {
+    "DAV-L1019441": "Tabla teórica a tasa fija (TIR mensual constante) y cuota fija $17.681.217; el banco liquida a tasa variable (canon 033: capital $12.327.298 / interés $5.062.372). El saldo del detalle 62 es el de esta tabla, no el del banco.",
+    "DAV-L1019448": "Tabla teórica a tasa fija y cuota constante; el banco liquida a tasa variable (canon 031: capital $8.867.342 / interés $4.177.893). Detalle 62 = saldo de la tabla.",
+    "DAV-L1021275": "La TIR de la tabla supera el canon de sólo intereses de los primeros 12 trimestres: la tabla capitaliza intereses y el saldo crece ($1.876,7 MM → $1.883,7 MM). El banco mantiene el capital en $1.876.684.264 y cobra 14,41% EA ($64,0 MM en jul-26 vs $51,5 MM en la tabla).",
+    "DAV-830624": "Interés mensual simple con IBR 6M + 3 pts / 12; el banco liquida semestre vencido a 15,51% EA. La columna 'medición al costo' (costo amortizado) resta los intereses del saldo: error de fórmula (ver columna Z).",
+    "DAV-607691": "Interés mensual simple con IBR 6M + 3 pts; el contrato es IBR + 3,40 y el banco factura semestral. Columna de costo amortizado con el mismo error de fórmula (ver columna Z).",
+    "DAV-569032": "Igual que 607691: puntos adicionales de la tabla (3%) distintos al contrato (3,40%); costo amortizado mal formulado.",
+    "BOG-453436746": "Capital fijo $62,5 MM mensual coincide con el banco; el interés de la tabla usa el IBR proyectado.",
+    "BOG-856670629": "Capital trimestral $182,2 MM coincide con el banco (diferencia de redondeo en el saldo).",
+    "BOG-858177259": "Capital trimestral $125 MM coincide con el banco.",
+    "BOG-1155297469": "Tabla del crédito cancelado/prorrogado el 14/29-jul-26.",
+    "BOG-1159383796": "La hoja 'Hoja2' es copia de la tabla del 1155297469: fechas feb–jul 2026 anteriores al inicio (22-jul-26) y saldo cero al 14-jul. No sirve como tabla del crédito nuevo.",
+    "BOG-L556449224": "Tabla a tasa fija; el banco liquida DTF variable: saldo certificado mayor que el de la tabla.",
+    "BOG-L556449180": "Tabla a tasa fija; el banco liquida DTF variable: saldo certificado mayor que el de la tabla.",
+    "BOG-L556449117": "Tabla a tasa fija con TIR muy baja (0,59% trimestral) y capital acelerado: saldo $57 MM por debajo del banco.",
+    "BOG-L556449064": "Tabla a tasa fija con TIR muy baja (0,59% trimestral) y capital acelerado: saldo $57 MM por debajo del banco.",
+    "BOG-L556449288": "Tabla a tasa fija; el banco liquida DTF variable: saldo certificado mayor que el de la tabla.",
+    "BOG-L557285005": "Tabla a tasa fija; el banco liquida IBR 3M variable: saldo certificado mayor que el de la tabla.",
+    "POP-631309940": "Capital trimestral $143,75 MM coincide con lo pagado; vence 17-dic-26 (todo corriente).",
+    "BBVA-9600277262": "Tabla del crédito anterior (11-dic-25 a 11-jun-26). No hay tabla del crédito renovado el 30-jun-26 (glosa 'crédito 0141').",
+    "BCL-1260105867": "Capital anual $1.666,7 MM; coincide con el certificado (capital vigente $3.333.333.334).",
+    "BCL-L362095": "ERROR: el periodo 5 (14-jun-26) aumenta el saldo en $48,8 MM (capital negativo) y la última cuota deja saldo negativo. El detalle 62 usa el saldo de dic-25 ($497,2 MM) sin actualizar.",
+    "BCL-L336817": "Tabla a tasa fija; detalle 62 = saldo de la tabla. Sin extracto 2026.",
+    "BCL-L331330": "Tabla con amortización de capital constante $14.586.381, pero desde feb-26 se paga $17.114.382 (mayor): la tabla no refleja los pagos reales.",
+    "DYP-482800190700": "Crédito Davivienda DYPSIS $72.300 MM (30-may-25 a 28-may-27) incluido en el archivo de tablas pero NO registrado en el mayor de Guaicaramo. Confirmar titular, vinculación y garantías otorgadas.",
+    "DAV-L1013934": "Contrato INPARME terminado; sin saldo en el mayor 2026.",
+}
+
+ANX = {}
+for n, ident in enumerate(ANX_ORDER, start=1):
+    t = TAB[ident]
+    sh = f"A{n:02d}-{t['hoja']}"[:31]
+    lea = t["tipo"] == "leasing"
+    p = t["param"]
+    ws = ws_new(sh, f"Anexo {sh} – Tabla de amortización del cliente vs recálculo de auditoría – {ident}",
+                f"Fuente: 64._Tabla_amortización_obligaciones_financieras.xlsm, hoja '{t['hoja']}'. Columnas A–G: cliente [A]; H–P: recálculo auditoría [B].",
+                [7, 11, 17, 15, 15, 15, 17, 17, 15, 17, 13, 13, 16, 9, 8, 8])
+    vi = p.get("Valor razonable") if lea else p.get("Capital")
+    if lea:
+        tasa_txt, fini, plazo = p.get("Tasa acordada"), p.get("Fecha inicio del arrendamiento"), f"{p.get('Plazo del arrendamiento')} {p.get('Plazo del arrendamiento (unidad)') or ''}"
+        unidad = str(p.get("Tasa de interés (unidad)") or "").upper()
+        nper = 12 if "MENS" in unidad else 4
+    else:
+        tasa_txt, fini, plazo = p.get("Tasa"), p.get("Fecha inicio"), f"{p.get('Plazo meses')} meses"
+        unidad, nper = "MENSUAL", 12
+    put(ws, 3, 1, "Banco / contrato", bold=True)
+    put(ws, 3, 3, f"{t.get('banco')} – {t.get('contrato')}", font=f_in)
+    put(ws, 4, 1, "Valor inicial", bold=True)
+    put(ws, 4, 3, vi, font=f_in, fmt=NUM)
+    put(ws, 5, 1, "Fecha inicio", bold=True)
+    put(ws, 5, 3, dt.date.fromisoformat(fini) if isinstance(fini, str) else fini, font=f_in, fmt=DATE)
+    put(ws, 6, 1, "Plazo / tasa pactada", bold=True)
+    put(ws, 6, 3, f"{plazo} – {tasa_txt}", font=f_in)
+    put(ws, 7, 1, "Tasa periódica tabla (TIR cliente)", bold=True)
+    put(ws, 7, 3, t.get("tir") if lea else "Por fila (col. N)", font=f_in, fmt="0.0000%")
+    put(ws, 8, 1, "TIR recalculada (flujos col. M)", bold=True)
+    put(ws, 9, 1, "Tasa EA equivalente", bold=True)
+    put(ws, 3, 6, "Resultados al 31-jul-2026", bold=True, border=False)
+    labels = ["Fecha última cuota ≤ corte", "Saldo tabla cliente", "Saldo recalculado", "Interés tabla ene–jul 26",
+              "Capital siguiente 12 meses (CP)", "Máx. dif. saldo |cliente − recalc.|"]
+    for k, lab in enumerate(labels):
+        put(ws, 4 + k, 6, lab)
+    HR = 11
+    header(ws, HR, ["Per.", "Fecha", "Saldo inicial", "Interés", "Capital", "Pago / cuota", "Saldo final",
+                    "Saldo inicial recalc.", "Interés recalc.", "Saldo final recalc.", "Dif. interés", "Dif. saldo",
+                    "Flujo (TIR)", "Tasa periodo", "Ene–jul 26", "CP 12m"], height=36)
+    r = HR + 1
+    A_FIRST = r
+    filas = t["filas"]
+    if lea:
+        filas = [{"per": 0, "fecha": fini, "saldo_ini": None, "interes": 0, "capital": 0, "pago": 0, "saldo_fin": vi}] + filas
+    for k, fl in enumerate(filas):
+        fe = dt.date.fromisoformat(fl["fecha"]) if isinstance(fl["fecha"], str) else fl["fecha"]
+        put(ws, r, 1, fl["per"], font=f_in)
+        put(ws, r, 2, fe, font=f_in, fmt=DATE)
+        put(ws, r, 3, fl["saldo_ini"], font=f_in, fmt=NUM)
+        put(ws, r, 4, fl["interes"], font=f_in, fmt=NUM)
+        put(ws, r, 5, fl["capital"], font=f_in, fmt=NUM)
+        put(ws, r, 6, fl["pago"] if lea else fl.get("cuota"), font=f_in, fmt=NUM)
+        put(ws, r, 7, fl["saldo_fin"], font=f_in, fmt=NUM)
+        put(ws, r, 14, "=$C$7" if lea else fl.get("tasa"), font=f_base if lea else f_in, fmt="0.0000%")
+        if k == 0:
+            put(ws, r, 8, f"=G{r}" if lea else f"=C{r}", fmt=NUM)
+            put(ws, r, 9, 0 if lea else f"=H{r}*N{r}", fmt=NUM)
+            put(ws, r, 10, f"=H{r}" if lea else f"=H{r}-E{r}", fmt=NUM)
+            put(ws, r, 13, f"=-$C$4", fmt=NUM)
+        else:
+            put(ws, r, 8, f"=J{r - 1}", fmt=NUM)
+            put(ws, r, 9, f"=H{r}*N{r}", fmt=NUM)
+            put(ws, r, 10, f"=H{r}+I{r}-F{r}" if lea else f"=H{r}-E{r}", fmt=NUM)
+            put(ws, r, 13, f"=F{r}", fmt=NUM)
+        put(ws, r, 11, f"=D{r}-I{r}", fmt=NUM)
+        put(ws, r, 12, f"=G{r}-J{r}", fmt=NUM)
+        put(ws, r, 15, f'=IF(AND(B{r}>=DATE(2026,1,1),B{r}<=Resumen!$C$5),1,0)', fmt=NUM0)
+        put(ws, r, 16, f'=IF(AND(B{r}>Resumen!$C$5,B{r}<=DATE(2027,7,31)),1,0)', fmt=NUM0)
+        r += 1
+    A_LAST = r - 1
+    rng = lambda c: f"${c}${A_FIRST}:${c}${A_LAST}"
+    put(ws, 8, 3, f'=IFERROR(IRR({rng("M")}),"N/A")', fmt="0.0000%")
+    put(ws, 9, 3, f'=IF(ISNUMBER(C8),(1+C8)^{nper}-1,"N/A")', fmt="0.00%")
+    put(ws, 4, 9, f'=_xlfn.MAXIFS({rng("B")},{rng("B")},"<="&Resumen!$C$5)', fmt=DATE)
+    put(ws, 5, 9, f'=SUMIFS({rng("G")},{rng("B")},I4)', fmt=NUM, fill=fill_key)
+    put(ws, 6, 9, f'=SUMIFS({rng("J")},{rng("B")},I4)', fmt=NUM)
+    put(ws, 7, 9, f'=SUMIFS({rng("D")},{rng("O")},1)', fmt=NUM)
+    put(ws, 8, 9, f'=SUMIFS({rng("E")},{rng("P")},1)', fmt=NUM)
+    put(ws, 9, 9, f"=SUMPRODUCT(MAX(ABS({rng('L')})))", fmt=NUM)
+    ws.freeze_panes = ws.cell(row=HR + 1, column=3)
+    ANX[ident] = {"sh": sh, "n": n}
+
+# ---------------------------------------------------------------------------- Rev_Tablas_Amort
+ws = ws_new("Rev_Tablas_Amort", "Revisión y recálculo de las tablas de amortización del cliente (papel 64) – corte 31-jul-2026",
+            "Cada fila resume un anexo A01–A25. Saldo banco desde Saldos_x_Obligacion; interés registrado desde Intereses_x_Obligacion.",
+            [17, 9, 13, 20, 20, 8, 16, 11, 26, 11, 10, 9, 11, 17, 17, 15, 17, 15, 16, 16, 15, 16, 16, 15, 15, 17, 17, 60])
+header(ws, 4, ["ID auditoría", "Hoja cliente", "Anexo", "Banco", "Contrato", "Tipo", "Valor inicial", "Fecha inicio",
+               "Tasa pactada", "TIR tabla (periodo)", "TIR recalc.", "Dif. TIR (pb)", "Última cuota ≤ corte",
+               "Saldo tabla 31-jul", "Saldo detalle 62", "Tabla − detalle 62", "Saldo banco 31-jul", "Tabla − banco",
+               "Interés tabla ene–jul 26", "Interés registrado 2026", "Registrado − tabla", "CP 12m según tabla",
+               "CP detalle 62", "CP tabla − detalle", "Máx. dif. recálculo saldo", "Costo amortizado cliente (col. W) 31-jul",
+               "C. amortizado − saldo tabla", "Observación de auditoría"], height=56)
+r = 5
+RT_FIRST = r
+for ident in ANX_ORDER:
+    t, a = TAB[ident], ANX[ident]
+    sh = f"'{a['sh']}'"
+    sxid = TAB_ID_SX.get(ident, ident)
+    put(ws, r, 1, ident, font=f_bold)
+    put(ws, r, 2, t["hoja"], font=f_in)
+    c = put(ws, r, 3, a["sh"], font=Font(name=FN, size=9, color="0563C1", underline="single"))
+    c.hyperlink = f"#{sh}!A1"
+    put(ws, r, 4, str(t.get("banco")), font=f_in)
+    put(ws, r, 5, str(t.get("contrato")), font=f_in)
+    put(ws, r, 6, "Leasing" if t["tipo"] == "leasing" else "Crédito")
+    put(ws, r, 7, f"={sh}!C4", fmt=NUM)
+    put(ws, r, 8, f"={sh}!C5", fmt=DATE)
+    put(ws, r, 9, f"={sh}!C6", wrap=True)
+    put(ws, r, 10, f'=IF(ISNUMBER({sh}!C7),{sh}!C7,"Por fila")', fmt="0.000%")
+    put(ws, r, 11, f"=IFERROR({sh}!C8,\"N/A\")", fmt="0.000%")
+    put(ws, r, 12, f'=IF(AND(ISNUMBER(J{r}),ISNUMBER(K{r})),(K{r}-J{r})*10000,"N/A")', fmt=PB)
+    put(ws, r, 13, f"={sh}!I4", fmt=DATE)
+    put(ws, r, 14, f"={sh}!I5", fmt=NUM)
+    put(ws, r, 15, f'=IF(COUNTIF({DR("C")},A{r})>0,SUMIFS({DR("F")},{DR("C")},A{r}),"No está")', fmt=NUM)
+    put(ws, r, 16, f'=IF(ISNUMBER(O{r}),N{r}-O{r},"N/A")', fmt=NUM)
+    put(ws, r, 17, f'=IFERROR(INDEX(Saldos_x_Obligacion!$L:$L,MATCH("{sxid}",Saldos_x_Obligacion!$A:$A,0)),"N/D")', fmt=NUM)
+    put(ws, r, 18, f'=IF(ISNUMBER(Q{r}),N{r}-Q{r},"N/D")', fmt=NUM)
+    put(ws, r, 19, f"={sh}!I7", fmt=NUM)
+    put(ws, r, 20, f'=IFERROR(INDEX(Intereses_x_Obligacion!$I:$I,MATCH("{sxid}",Intereses_x_Obligacion!$A:$A,0)),"N/D")', fmt=NUM)
+    put(ws, r, 21, f'=IF(ISNUMBER(T{r}),T{r}-S{r},"N/D")', fmt=NUM)
+    put(ws, r, 22, f"=MAX({sh}!I8,0)", fmt=NUM)
+    put(ws, r, 23, f'=IF(COUNTIF({DR("C")},A{r})>0,SUMIFS({DR("M")},{DR("C")},A{r}),"No está")', fmt=NUM)
+    put(ws, r, 24, f'=IF(ISNUMBER(W{r}),V{r}-W{r},"N/A")', fmt=NUM)
+    put(ws, r, 25, f"={sh}!I9", fmt=NUM)
+    if t["tipo"] == "credito":
+        f_ = [x for x in t["filas"] if x["fecha"] and x["fecha"] <= "2026-07-31"]
+        ca = f_[-1].get("ca_saldo") if f_ else None
+        put(ws, r, 26, ca, font=f_in, fmt=NUM)
+        put(ws, r, 27, f'=IF(ISNUMBER(Z{r}),Z{r}-N{r},"N/A")', fmt=NUM, fill=fill_bad if ca and abs(ca - (f_[-1]["saldo_fin"] or 0)) > 1000 else None)
+    else:
+        put(ws, r, 26, "N/A")
+        put(ws, r, 27, "N/A")
+    put(ws, r, 28, OBS_T.get(ident, ""), font=f_in, wrap=True)
+    ws.row_dimensions[r].height = 48
+    r += 1
+RT_LAST = r - 1
+put(ws, r, 1, "TOTAL (obligaciones en el mayor)", bold=True, fill=fill_tot)
+for c in (14, 15, 17, 19, 20, 22, 23):
+    L = get_column_letter(c)
+    put(ws, r, c, f'=SUMIFS({L}{RT_FIRST}:{L}{RT_LAST},$A${RT_FIRST}:$A${RT_LAST},"<>DYP*",$A${RT_FIRST}:$A${RT_LAST},"<>DAV-L1013934",$A${RT_FIRST}:$A${RT_LAST},"<>BOG-1155297469",$A${RT_FIRST}:$A${RT_LAST},"<>BBVA-9600277262")',
+        fmt=NUM, bold=True, fill=fill_tot)
+RT_TOT = r
+r += 2
+put(ws, r, 1, "Conclusiones de la revisión de tablas", font=f_sec, border=False)
+r += 1
+for txt in [
+    "1. Los saldos del detalle 62 se toman de estas tablas teóricas (tasa fija / IBR-DTF proyectado), no de los extractos: en leasings la diferencia con el banco proviene de la tasa variable efectivamente cobrada.",
+    "2. El recálculo aritmético (columna Y) valida la consistencia interna de cada tabla (saldo inicial + interés − pago = saldo final). Las diferencias materiales indican fórmulas alteradas o filas pegadas como valor.",
+    "3. Las tablas de créditos Davivienda tienen la columna de costo amortizado mal formulada (resta intereses del saldo): no deben usarse para medir el pasivo bajo NIIF 9 (B5.4.1).",
+    "4. Faltan tablas para: leasing Bancolombia 386735, leasing GECOLSA (Davivienda), BBVA renovado (0141) y el crédito Bogotá 1159383796 ('Hoja2' es una copia del crédito anterior).",
+    "5. El archivo incluye el crédito Davivienda DYPSIS ($72.300 MM) que no está en el mayor de Guaicaramo: confirmar titular y garantías (NIC 24, NIIF 9 §2.1(e) garantías financieras, NIC 37).",
+]:
+    put(ws, r, 1, txt, wrap=True, border=False)
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=14)
+    ws.row_dimensions[r].height = 28
+    r += 1
+ws.freeze_panes = "B5"
+
+# ---------------------------------------------------------------------------- Int_Glosas
+DIRECTOS = {"BOG-453436746", "DAV-L1019441", "DAV-L1019448", "BCL-L331330", "BCL-L336817"}
+
+
+def pint(desc):
+    m = re.search(r"INTE?RE?SES?\s*[:$]?\s*([\d][\d\.,]*\d)", desc)
+    if not m:
+        return None
+    s_ = m.group(1)
+    if re.fullmatch(r"\d{1,3}(\.\d{3})+\.\d{1,2}", s_):
+        a_, b_ = s_.rsplit(".", 1)
+        return float(a_.replace(".", "") + "." + b_)
+    if re.fullmatch(r"\d{1,3}(\.\d{3})+", s_):
+        return float(s_.replace(".", ""))
+    if re.fullmatch(r"\d+", s_):
+        return float(s_)
+    return None
+
+
+ws = ws_new("Int_Glosas", "Intereses pagados directamente al gasto (obligaciones sin causación en 2130) – según glosa del comprobante",
+            "Fuente: descripción de los comprobantes CL del Mayor_Mov. Aplica a obligaciones de pago mensual que el cliente no causa en 2130.",
+            [17, 13, 11, 11, 17, 12, 90])
+header(ws, 4, ["ID auditoría", "Documento", "Fecha", "Cuenta", "Interés según glosa", "¿Dato?", "Descripción"])
+r = 5
+IG_FIRST = r
+for row in mov_rows:
+    (i, _a, acct, nom, _cc, terc, deb, cre, _net, fecha, nit, _t, doc, tdoc, desc, *_rest) = row
+    acct = str(acct).strip()
+    desc = (desc or "").strip()
+    if acct[:4] not in ("2105", "2120") or acct == "21050301":
+        continue
+    ident = assign_id(acct, terc, desc)
+    if ident not in DIRECTOS:
+        continue
+    v = pint(desc)
+    put(ws, r, 1, ident, font=f_bold)
+    put(ws, r, 2, (doc or "").strip(), font=f_in)
+    put(ws, r, 3, fecha, font=f_in, fmt=DATE)
+    put(ws, r, 4, acct, font=f_in)
+    put(ws, r, 5, v, font=f_in, fmt=NUM, fill=None if v is not None else fill_bad)
+    put(ws, r, 6, "Sí" if v is not None else "Sin dato")
+    put(ws, r, 7, desc, font=f_in)
+    r += 1
+IG_LAST = r - 1
+put(ws, r, 4, "TOTAL", bold=True, fill=fill_tot)
+put(ws, r, 5, f"=SUM(E{IG_FIRST}:E{IG_LAST})", fmt=NUM, bold=True, fill=fill_tot)
+put(ws, r, 6, f'=COUNTIF(F{IG_FIRST}:F{IG_LAST},"Sin dato")', fmt=NUM0, bold=True, fill=fill_tot)
+ws.freeze_panes = "B5"
+
+# ---------------------------------------------------------------------------- Intereses_x_Obligacion
+ws = ws_new("Intereses_x_Obligacion", "Intereses por obligación 2026 – causación (2130), pagos, gasto y recálculo al corte",
+            "Saldo 2130 por obligación = detalle 31-dic-25 + causaciones 2026 − reversiones 2026. Gasto 2026 = causaciones 2130 + intereses pagados directo al gasto (Int_Glosas).",
+            [17, 15, 16, 16, 16, 16, 16, 9, 17, 17, 16, 17, 16, 45])
+header(ws, 4, ["ID auditoría", "Banco", "2130 al 31-dic-25", "Causaciones 2026 (Cr 2130)", "Reversiones 2026 (Db 2130)",
+               "2130 al 31-jul-26 por obligación", "Pagado directo a gasto (glosas)", "Cuotas sin dato", "Gasto intereses 2026 registrado",
+               "Interés según tabla ene–jul 26", "Registrado − tabla", "Causación recalculada 31-jul", "Causación no registrada",
+               "Comentario"], height=48)
+r = 5
+IX_FIRST = r
+P2R = lambda c: f"Recalculo_Intereses!${c}${P2_FIRST}:${c}${P2_LAST}"
+for bank_, ids in SX_IDS:
+    for ident in ids:
+        put(ws, r, 1, ident, font=f_bold)
+        put(ws, r, 2, bank_, font=f_in)
+        put(ws, r, 3, f'=SUMIFS({MD("G")},{MD("J")},A{r},{MD("C")},"2130*")', fmt=NUM)
+        put(ws, r, 4, f'=SUMIFS({R_CRE},{R_ID},A{r},{R_CTA},"2130*")', fmt=NUM)
+        put(ws, r, 5, f'=SUMIFS({R_DEB},{R_ID},A{r},{R_CTA},"2130*")', fmt=NUM)
+        put(ws, r, 6, f"=C{r}+D{r}-E{r}", fmt=NUM)
+        put(ws, r, 7, f"=SUMIFS(Int_Glosas!$E${IG_FIRST}:$E${IG_LAST},Int_Glosas!$A${IG_FIRST}:$A${IG_LAST},A{r})", fmt=NUM)
+        put(ws, r, 8, f'=COUNTIFS(Int_Glosas!$A${IG_FIRST}:$A${IG_LAST},A{r},Int_Glosas!$F${IG_FIRST}:$F${IG_LAST},"Sin dato")', fmt=NUM0)
+        put(ws, r, 9, f"=D{r}+G{r}", fmt=NUM)
+        put(ws, r, 10, f'=IFERROR(INDEX(Rev_Tablas_Amort!$S:$S,MATCH(A{r},Rev_Tablas_Amort!$A:$A,0)),"Sin tabla")', fmt=NUM)
+        put(ws, r, 11, f'=IF(ISNUMBER(J{r}),I{r}-J{r},"N/A")', fmt=NUM)
+        put(ws, r, 12, f"=SUMIFS({P2R('I')},{P2R('A')},A{r})", fmt=NUM)
+        put(ws, r, 13, f"=L{r}-F{r}", fmt=NUM, fill=fill_bad)
+        put(ws, r, 14, {"DAV-8906": "Cancelado ene-26: causación de 2025 reversada con el pago.",
+                        "BOG-453436746": "Paga mensual; el cliente no causa entre cuotas.",
+                        "BBVA-0141": "Sin causación de julio tras la renovación (PEND-3).",
+                        "DAV-LGECOLSA": "Sin tabla ni extracto: intereses no identificados en 2026 (PEND-12)."}.get(ident, ""), font=f_in, wrap=True)
+        r += 1
+IX_LAST = r - 1
+put(ws, r, 1, "TOTAL", bold=True, fill=fill_tot)
+for c in (3, 4, 5, 6, 7, 8, 9, 12, 13):
+    L = get_column_letter(c)
+    put(ws, r, c, f"=SUM({L}{IX_FIRST}:{L}{IX_LAST})", fmt=NUM, bold=True, fill=fill_tot)
+IX_TOT = r
+r += 1
+put(ws, r, 1, "Balance 2130 (signo +)")
+put(ws, r, 3, f"=-{BAL('2130', 'SI')}", fmt=NUM)
+put(ws, r, 4, f"={BAL('2130', 'C')}", fmt=NUM)
+put(ws, r, 5, f"={BAL('2130', 'D')}", fmt=NUM)
+put(ws, r, 6, f"=-{BAL('2130', 'SF')}", fmt=NUM)
+r += 1
+put(ws, r, 1, "Diferencia")
+for c in (3, 4, 5, 6):
+    L = get_column_letter(c)
+    put(ws, r, c, f"={L}{r - 2}-{L}{r - 1}", fmt=NUM, fill=fill_key)
+r += 2
+section(ws, r, "B. Cruce de cuentas de intereses del balance contra la suma por obligación", 14)
+r += 1
+header(ws, r, ["Código", "Cuenta contable", "Saldo / movimiento balance", "Valor según obligaciones", "Diferencia", "", "Comentario"])
+r += 1
+IXB_FIRST = r
+lea_ids = lambda col: f'SUMIFS({col}{IX_FIRST}:{col}{IX_LAST},$A${IX_FIRST}:$A${IX_LAST},"*-L*")'
+crb_ids = lambda col: f'(SUM({col}{IX_FIRST}:{col}{IX_LAST})-{lea_ids(col)})'
+rowsB = [
+    ("21300101", "Intereses financieros por pagar O.F. (SF)", f"=-{BAL('21300101', 'SF')}", f"={crb_ids('F')}", ""),
+    ("21300102", "Intereses leasing por pagar (SF)", f"=-{BAL('21300102', 'SF')}", f"={lea_ids('F')}", ""),
+    ("53052030", "Intereses sobre préstamos causados (SF)", f"={BAL('53052030', 'SF')}", f"={crb_ids('F')}", "El saldo debe igualar los intereses por pagar de créditos."),
+    ("53052040", "Intereses leasing causados (SF)", f"={BAL('53052040', 'SF')}", f"={lea_ids('F')}", ""),
+    ("53052020", "Intereses préstamos efectivamente pagados (débitos)", f"={BAL('53052020', 'D')}", f"={crb_ids('E')}+{crb_ids('G')}",
+     "Débitos = reversiones de 2130 + intereses pagados directo. La diferencia corresponde a pagos sin dato en glosa u otros intereses."),
+    ("53052010", "Intereses leasing efectivamente pagados (débitos)", f"={BAL('53052010', 'D')}", f"={lea_ids('E')}+{lea_ids('G')}", "Ídem para leasing."),
+    ("5305", "Gasto de intereses neto ene–jul (10+20+30+40)", "=Gasto_Intereses!B14", f"=I{IX_TOT}", "Gasto registrado vs suma por obligación (causaciones + pagos directos)."),
+]
+for cod, nom_, a_, b_, com in rowsB:
+    put(ws, r, 1, cod, font=f_in)
+    put(ws, r, 2, nom_)
+    put(ws, r, 3, a_, fmt=NUM)
+    put(ws, r, 4, b_, fmt=NUM)
+    put(ws, r, 5, f"=C{r}-D{r}", fmt=NUM)
+    put(ws, r, 7, com, wrap=True)
+    ws.merge_cells(start_row=r, start_column=7, end_row=r, end_column=14)
+    ws.row_dimensions[r].height = 26
+    r += 1
+IXB_LAST = r - 1
+ws.freeze_panes = "C5"
+
 # ============================================================================ 8. GASTO DE INTERESES (prueba analítica)
 ws = ws_new("Gasto_Intereses", "Prueba analítica sustantiva – gasto por intereses ene–jul 2026",
             "Expectativa = deuda promedio × ((1 + tasa promedio ponderada)^(días/365) − 1).",
@@ -1059,35 +1586,67 @@ for k, (lab, f, fmt, com) in enumerate(rows, start=4):
 GI_PCT, GI_CONC = "Gasto_Intereses!$B$18", "Gasto_Intereses!$B$20"
 
 # ============================================================================ 9. CLASIFICACIÓN CP/LP
-ws = ws_new("Clasif_CP_LP", "Clasificación corriente / no corriente (NIC 1 párr. 69–76) – detalle 62 vs mayor",
-            "CP corregido = MIN(MAX(CP cliente,0); saldo). La porción corriente debe validarse contra las tablas de amortización.",
-            [40, 18, 18, 18, 18, 18, 18, 50])
-header(ws, 4, ["Concepto", "CP detalle (cliente)", "LP detalle (cliente)", "CP detalle corregido", "LP detalle corregido",
-               "Cuenta CP mayor", "Cuenta LP mayor", "Comentario"])
+ws = ws_new("Clasif_CP_LP", "Clasificación corriente / no corriente (NIC 1 párr. 69–76) – por obligación con tablas de amortización",
+            "CP auditoría = saldo total si vence ≤ 31-jul-27; si no, capital de los próximos 12 meses según la tabla (papel 64), acotado al saldo del mayor. Sin tabla: se mantiene la clasificación contable.",
+            [26, 18, 18, 18, 18, 18, 18, 18, 18, 50])
+header(ws, 4, ["Concepto", "CP auditoría (tablas / vencimiento)", "CP detalle 62 corregido", "Cuenta CP mayor", "Cuenta LP mayor",
+               "Saldo total mayor", "", "", "", "Comentario"])
+put(ws, 9, 1, "Reclasificación propuesta LP → CP (CP auditoría − cuenta CP del mayor)", font=f_sec, border=False)
+header(ws, 10, ["Concepto", "Reclasificación", "", "", "", "", "", "", "", "Comentario"])
+put(ws, 16, 1, "Porción corriente por obligación", font=f_sec, border=False)
+header(ws, 17, ["ID auditoría", "Tipo", "Saldo mayor 31-jul-26", "Vencimiento final", "CP 12m según tabla", "CP registrado (sin tabla)",
+                "CP auditoría", "CP detalle 62 corregido", "CP auditoría − detalle", "Criterio"], height=36)
+VENC_OVR = {"BOG-1159383796": dt.date(2027, 1, 22), "BBVA-0141": dt.date(2026, 12, 30)}
+r = 18
+CL_FIRST = r
+for bank_, ids in SX_IDS:
+    for ident in ids:
+        tp = "Leasing" if ("-L" in ident or ident.startswith("N/A")) else "Crédito"
+        put(ws, r, 1, ident, font=f_bold)
+        put(ws, r, 2, tp)
+        put(ws, r, 3, f"=Saldos_x_Obligacion!H{SX_ROW[ident]}", fmt=NUM)
+        if ident in VENC_OVR:
+            put(ws, r, 4, VENC_OVR[ident], font=f_in, fmt=DATE)
+        else:
+            put(ws, r, 4, f'=IFERROR(INDEX({DR("P")},MATCH(A{r},{DR("C")},0)),"N/D")', fmt=DATE)
+        put(ws, r, 5, f'=IFERROR(INDEX(Rev_Tablas_Amort!$V:$V,MATCH(A{r},Rev_Tablas_Amort!$A:$A,0)),"Sin tabla")', fmt=NUM)
+        cpa = "21202040" if tp == "Leasing" else "21050100"
+        put(ws, r, 6, f'=SUMIFS({MD("G")},{MD("J")},A{r},{MD("C")},"{cpa}")+SUMIFS({R_CRE},{R_ID},A{r},{R_CTA},"{cpa}")-SUMIFS({R_DEB},{R_ID},A{r},{R_CTA},"{cpa}")', fmt=NUM)
+        put(ws, r, 7, f'=IF(C{r}<=0,0,IF(AND(ISNUMBER(D{r}),D{r}<=DATE(2027,7,31)),C{r},IF(ISNUMBER(E{r}),MIN(MAX(E{r},0),C{r}),MIN(MAX(F{r},0),C{r}))))', fmt=NUM)
+        put(ws, r, 8, f"=SUMIFS({DR('W')},{DR('C')},A{r})", fmt=NUM)
+        put(ws, r, 9, f"=G{r}-H{r}", fmt=NUM)
+        put(ws, r, 10, f'=IF(C{r}<=0,"Sin saldo",IF(AND(ISNUMBER(D{r}),D{r}<=DATE(2027,7,31)),"Vence en 12 meses: todo corriente",IF(ISNUMBER(E{r}),"Capital próximos 12 meses según tabla","Sin tabla: se mantiene CP contable [P]")))', wrap=True)
+        r += 1
+CL_LAST = r - 1
+put(ws, r, 1, "TOTAL", bold=True, fill=fill_tot)
+for c in (3, 6, 7, 8, 9):
+    L = get_column_letter(c)
+    put(ws, r, c, f"=SUM({L}{CL_FIRST}:{L}{CL_LAST})", fmt=NUM, bold=True, fill=fill_tot)
+CL_R = lambda col, tp: f'SUMIFS(${col}${CL_FIRST}:${col}${CL_LAST},$B${CL_FIRST}:$B${CL_LAST},"{tp}")'
 for k, (tp, cp, lp) in enumerate((("Crédito", "21050100", "21050201"), ("Leasing", "21202040", "21202140")), start=5):
     put(ws, k, 1, f"{tp}s")
-    for c, col in ((2, "M"), (3, "N"), (4, "W"), (5, "X")):
-        put(ws, k, c, f'=SUMIFS({DR(col)},{DR("D")},"{tp}")', fmt=NUM)
-    put(ws, k, 6, f"=-{BAL(cp,'SF')}", fmt=NUM)
-    put(ws, k, 7, f"=-{BAL(lp,'SF')}", fmt=NUM)
+    put(ws, k, 2, "=" + CL_R("G", tp), fmt=NUM)
+    put(ws, k, 3, "=" + CL_R("H", tp), fmt=NUM)
+    put(ws, k, 4, f"=-{BAL(cp, 'SF')}", fmt=NUM)
+    put(ws, k, 5, f"=-{BAL(lp, 'SF')}", fmt=NUM)
+    put(ws, k, 6, f"=D{k}+E{k}", fmt=NUM)
 put(ws, 7, 1, "TOTAL", bold=True, fill=fill_tot)
-for c in range(2, 8):
+for c in range(2, 7):
     L = get_column_letter(c)
     put(ws, 7, c, f"={L}5+{L}6", fmt=NUM, bold=True, fill=fill_tot)
-put(ws, 5, 8, "Las cuentas CP/LP del mayor se asignan por origen del crédito, no por vencimiento.", font=f_in, wrap=True)
-put(ws, 6, 8, "El CP del mayor incluye $572 MM del leasing 386735 no incluido en el detalle.", font=f_in, wrap=True)
-put(ws, 9, 1, "Reclasificación propuesta LP → CP (detalle corregido − mayor)", font=f_sec, border=False)
-header(ws, 10, ["Concepto", "Reclasificación", "", "", "", "", "", "Comentario"])
+put(ws, 5, 10, "Las cuentas CP/LP del mayor se asignan por origen del crédito, no por vencimiento.", font=f_in, wrap=True)
+put(ws, 6, 10, "Incluye 386735 y GECOLSA sin tabla (se mantiene su clasificación contable).", font=f_in, wrap=True)
 put(ws, 11, 1, "Créditos: 21050201 → 21050100")
-put(ws, 11, 2, "=D5-F5", fmt=NUM, fill=fill_key)
-put(ws, 12, 1, "Leasing: 21202140 → 21202040 (sin 386735)")
-put(ws, 12, 2, f'=D6-(F6-SUMIFS({R_CRE},{R_ID},"BCL-L386735",{R_CTA},"21202040"))', fmt=NUM, fill=fill_key)
-put(ws, 12, 8, "La porción corriente del leasing 386735 ($572 MM registrada en CP) debe validarse con su tabla de amortización.", font=f_in, wrap=True)
+put(ws, 11, 2, "=B5-D5", fmt=NUM, fill=fill_key)
+put(ws, 12, 1, "Leasing: 21202140 → 21202040")
+put(ws, 12, 2, "=B6-D6", fmt=NUM, fill=fill_key)
+put(ws, 12, 10, "Negativo = el mayor tiene más corto plazo que el calculado (reclasificar CP → LP).", font=f_in, wrap=True)
 put(ws, 13, 1, "Tarjetas de crédito: agrupadas en 210502 (LP) → presentar como corriente")
 put(ws, 13, 2, f"=-{BAL('21050301','SF')}", fmt=NUM, fill=fill_key)
-put(ws, 15, 1, "Errores de clasificación en el detalle 62", font=f_sec, border=False)
-header(ws, 16, ["ID auditoría", "Saldo", "CP cliente", "LP cliente", "CP+LP − saldo", "", "", "Error"])
-k = 17
+r += 2
+put(ws, r, 1, "Errores de clasificación en el detalle 62", font=f_sec, border=False)
+header(ws, r + 1, ["ID auditoría", "Saldo", "CP cliente", "LP cliente", "CP+LP − saldo", "", "", "", "", "Error"])
+k = r + 2
 for bank, num, ident, rr in det:
     cp, lp, sal = rr[10] or 0, rr[11] or 0, rr[3]
     if abs(cp + lp - sal) > 1 or cp < 0 or lp < 0 or cp > sal:
@@ -1097,7 +1656,7 @@ for bank, num, ident, rr in det:
         put(ws, k, 3, f"=Detalle_62!M{rowd}", fmt=NUM)
         put(ws, k, 4, f"=Detalle_62!N{rowd}", fmt=NUM)
         put(ws, k, 5, f"=C{k}+D{k}-B{k}", fmt=NUM)
-        put(ws, k, 8, "CP mayor que el saldo y LP negativo." if cp > sal else "CP + LP no suma el saldo (LP posiblemente copiado de otra fila).",
+        put(ws, k, 10, "CP mayor que el saldo y LP negativo." if cp > sal else "CP + LP no suma el saldo (LP posiblemente copiado de otra fila).",
             font=f_in, wrap=True)
         k += 1
 
@@ -1107,16 +1666,17 @@ ws = ws_new("Hallazgos", "Hallazgos, referencias NIIF y ajustes propuestos",
             [5, 16, 70, 18, 26, 55])
 header(ws, 4, ["#", "Afirmación", "Hallazgo", "Monto (COP)", "Referencia normativa", "Recomendación / acción", "Estado"])
 ws.column_dimensions["G"].width = 24
-H_PEND = {2: "PEND-1, PEND-2", 3: "PEND-1, PEND-2", 5: "PEND-3, PEND-5, PEND-10", 6: "PEND-6", 8: "PEND-8",
-          11: "PEND-7", 13: "PEND-1 a PEND-5", 15: "PEND-11"}
+H_PEND = {2: "PEND-1, PEND-2, PEND-12", 3: "PEND-2", 5: "PEND-3, PEND-5, PEND-10", 6: "PEND-6", 8: "PEND-8",
+          11: "PEND-7", 13: "PEND-1 a PEND-5", 15: "PEND-11", 18: "PEND-12", 20: "PEND-14", 21: "PEND-5, PEND-14",
+          22: "PEND-14", 23: "PEND-13", 24: "PEND-8"}
 cdm = "Cruce_Detalle_Mayor"
 H = [
     ("Integridad", "El leasing Bancolombia 386735 (camión VW Constellation, IBR TV + 1,35) se registró en el mayor el 28-jul-26 (NB-00001014) pero NO está en el detalle 62 del cliente.",
      f"={cdm}!F14", "NIIF 16 p.26; NIC 1 p.15", "Incluir el contrato en el detalle 62 con su tabla de amortización; solicitar contrato y certificado."),
-    ("Exactitud / Integridad", "Diferencia de capital de leasing entre el mayor (2120) y el detalle 62. Se explica por el leasing 386735, por leasings de Bogotá con saldos desactualizados y por un residual sin explicar en leasings de Davivienda/Bancolombia.",
-     f"={cdm}!F7", "NIIF 16 p.36; NIC 1 p.15", "Conciliar contrato a contrato contra certificados; actualizar el detalle 62 con saldos bancarios."),
-    ("Exactitud", "Residual NO explicado de la diferencia de leasing (contratos sin extracto de saldo: Davivienda 1019441, 1019448, 1021275 y Bancolombia 362095, 336817, 331330).",
-     f"={cdm}!F16", "NIA 505 / NIA 500", "Circularizar a Davivienda Leasing y Bancolombia; obtener tablas de amortización."),
+    ("Exactitud / Integridad", "Diferencia de capital de leasing entre el mayor (2120) y el detalle 62, explicada obligación por obligación (Saldos_x_Obligacion): 386735 y GECOLSA omitidos; Bogotá, Davivienda y Bancolombia con saldos de tablas teóricas en el detalle.",
+     f"={cdm}!F7", "NIIF 16 p.36; NIC 1 p.15", "Actualizar el detalle 62 con los saldos del banco y conciliar mensualmente por contrato."),
+    ("Exactitud", "Leasings Bancolombia: el detalle 62 difiere del saldo estimado del banco (362095 conserva el saldo de dic-25; la tabla 331330 no refleja la cuota real pagada).",
+     f'=SUMIFS({SX("P")},{SX("A")},"BCL-L3*")', "NIIF 16 p.36", "Obtener certificados Bancolombia al 31-jul-26 y actualizar tablas."),
     ("Exactitud", "Leasings Banco de Bogotá (pozos 1–5 y planta Jenbacher): el detalle 62 está por debajo del saldo certificado tras el canon de julio (p.ej. pozos 3 y 4 −$57 MM c/u).",
      f"=-{C_BOGL}", "NIIF 16 p.36", "Actualizar el detalle 62 con los saldos certificados."),
     ("Corte / Valuación", "Intereses causados al 31-jul-26 no registrados: el cliente causa cifras fijas hasta ~el día 24 y no causa en obligaciones de pago mensual (453436746, BBVA, leasings mensuales) ni en el periodo posterior al último pago.",
@@ -1126,7 +1686,7 @@ H = [
     ("Exactitud (detalle)", "Tasas EA del detalle 62 calculadas con periodicidad distinta a la declarada (BBVA, Bancolombia 1260105867 y 362095) y tasas del detalle distintas a las certificadas (p.ej. 453436746: 17,52% vs 16,96%; 856670629: 15,83% vs 14,94%).",
      None, "NIIF 7 p.33-40 (riesgo de tasa)", "Usar la tasa certificada por el banco y la periodicidad contractual."),
     ("Presentación", "Clasificación CP/LP: el detalle 62 tiene errores (Banco Popular CP $575 MM > saldo $287,5 MM y LP negativo; Pozo #2 CP + LP ≠ saldo) y las cuentas CP/LP del mayor no reflejan vencimientos a 12 meses.",
-     "=Clasif_CP_LP!B11+Clasif_CP_LP!B12", "NIC 1 p.69-76", "Reclasificar la porción corriente (AJE-3) y corregir el detalle 62."),
+     "=Clasif_CP_LP!B11+Clasif_CP_LP!B12", "NIC 1 p.69-76", "Reclasificar la porción corriente (AJE-2) calculada con tablas y vencimientos; corregir el detalle 62."),
     ("Presentación", "Las tarjetas de crédito por pagar (21050301) están agrupadas dentro de 'Obligaciones financieras a largo plazo' (210502).",
      "=Clasif_CP_LP!B13", "NIC 1 p.69", "Presentar como pasivo corriente."),
     ("Exactitud", "Abonos a capital aplicados por Davivienda por excedentes de pago (127,57 + 269,47 + 627,79 + 617,95 + 786,80) no registrados: el cliente lleva todo el pago a intereses.",
@@ -1145,6 +1705,20 @@ H = [
      None, "NIC 8 p.41; NIC 1 p.27", "Usar tablas de amortización por obligación; revisar las glosas."),
     ("Integridad", "Mayor vs balance: los débitos, créditos y saldos de las cuentas 21 del movimiento cuadran con los dos balances de prueba (24-ago y 29-sep), que son idénticos.",
      f"=Cruce_Mov_Balance!H{CMB_TOT}", "—", "Sin excepción."),
+    ("Integridad", "Leasing Davivienda GECOLSA (2 motogeneradores, registrado jul-25 en 21202140) incluido en el mayor pero omitido en el detalle 62 y en la validación del PT 2025; sin tabla ni extracto.",
+     f'=SUMIFS({SX("H")},{SX("A")},"DAV-LGECOLSA")', "NIIF 16 p.26 y 47; NIA 505", "Obtener contrato, tabla y certificado; incluirlo en el detalle 62."),
+    ("Valuación", "Las tablas de leasing del cliente son teóricas (tasa fija / índice proyectado) y no se remiden cuando cambian IBR/DTF: el saldo de la tabla difiere del saldo bancario.",
+     f'=SUMIFS(Rev_Tablas_Amort!R{RT_FIRST}:R{RT_LAST},Rev_Tablas_Amort!F{RT_FIRST}:F{RT_LAST},"Leasing")', "NIIF 16 p.36, 42(b) y 43 (nueva medición por cambio en índice o tasa)", "Remedir el pasivo con la tasa vigente o usar el saldo bancario; actualizar tablas cada periodo."),
+    ("Exactitud (tabla)", "Tabla Bancolombia 362095 con error: el periodo 5 (14-jun-26) aumenta el saldo (capital negativo) y la última cuota deja saldo negativo.",
+     f"=ABS('{ANX['BCL-L362095']['sh']}'!E17)", "NIIF 16 p.36", "Corregir la tabla con el plan de pagos del banco."),
+    ("Exactitud (tabla)", "La tabla 'Hoja2' del crédito Bogotá 1159383796 es copia de la del 1155297469 (fechas feb–jul 2026 y saldo cero al 14-jul): no representa el crédito vigente.",
+     None, "NIIF 9 B5.4", "Elaborar la tabla del crédito nuevo (22-jul-26 a 22-ene-27)."),
+    ("Valuación (tabla)", "Columna 'medición al costo' (costo amortizado) de las tablas de créditos Davivienda mal formulada: resta los intereses del saldo (830624: costo amortizado < capital).",
+     f'=INDEX(Rev_Tablas_Amort!AA:AA,MATCH("DAV-830624",Rev_Tablas_Amort!A:A,0))', "NIIF 9 p.4.2.1, 5.4.1 y B5.4.1", "Corregir la fórmula; no usar esa columna para medir el pasivo."),
+    ("Derechos y obligaciones", "El archivo de tablas incluye el crédito Davivienda DYPSIS 7000482800190700 por $72.300 MM (may-25 a may-27) que no está en el mayor de Guaicaramo.",
+     72300000000, "NIC 24; NIIF 9 §2.1(e) y B2.5 (garantías financieras); NIC 37 p.86", "Confirmar titular, vinculación y si Guaicaramo es garante/codeudor; revelar si aplica."),
+    ("Integridad (tablas)", "Faltan tablas de amortización para: leasing Bancolombia 386735, leasing GECOLSA, BBVA renovado (0141) y crédito Bogotá 1159383796.",
+     None, "NIIF 7 p.39; NIC 1 p.69", "Solicitar las tablas o planes de pago bancarios."),
 ]
 r = 5
 H_ROW = {}
@@ -1184,11 +1758,12 @@ for aje, cta, des, db, cr, sop in AJE:
     put(ws, r, 5, cr, fmt=NUM)
     put(ws, r, 6, sop, wrap=True)
     r += 1
+A_FIRST_H, A_LAST_H = A_FIRST, r - 1
 put(ws, r, 3, "Sumas iguales", bold=True, fill=fill_tot)
 put(ws, r, 4, f"=SUM(D{A_FIRST}:D{r - 1})", fmt=NUM, bold=True, fill=fill_tot)
 put(ws, r, 5, f"=SUM(E{A_FIRST}:E{r - 1})", fmt=NUM, bold=True, fill=fill_tot)
 r += 1
-put(ws, r, 3, "AJE-2 depende de validar la porción corriente del detalle 62 con tablas de amortización; el saldo del leasing (diferencia de $1.018 MM) se ajustará cuando se obtengan los certificados faltantes.",
+put(ws, r, 3, "AJE-2 se calcula con tablas de amortización y vencimientos (Clasif_CP_LP); para 386735 y GECOLSA (sin tabla) se mantiene la clasificación contable. El mayor de leasing cuadra con el banco en Bogotá; en Davivienda/Bancolombia se usa el extracto de dic-25 (estimado).",
     font=f_sub, border=False)
 
 # ============================================================================ 10b. PENDIENTES
@@ -1200,11 +1775,12 @@ header(ws, 4, ["Ref.", "Pendiente / información requerida", "Obligación (ID)",
 PEND = [
     ("PEND-1", "Certificados de saldo de capital al 31-jul-26 de los leasings Davivienda 1019441-2, 1019448-3 y 1021275-3 (los extractos sólo traen la factura del canon).",
      "DAV-L1019441 / L1019448 / L1021275", f"=Recalculo_Intereses!K{P3_TOT}", "2, 3, 13", "Davivienda Leasing",
-     "Se usa el saldo del detalle 62; saldo implícito estimado en Recalculo_Intereses Parte 3. Recibidos LEASING_1275-3/9441-2/9448-3_DAVIVIENDA.pdf: son facturas de canon sin saldo de capital (Certificados sección D).",
-     "Parcial – recibido sin saldo"),
+     "Saldo banco estimado = extracto 31-dic-25 (PT 2025) + movimientos 2026 [E] (Saldos_x_Obligacion). Facturas LEASING_1275-3/9441-2/9448-3_DAVIVIENDA.pdf recibidas sin saldo de capital.",
+     "Parcial – estimado con extracto dic-25"),
     ("PEND-2", "Certificados de saldo de los leasings Bancolombia 362095, 336817, 331330 y contrato + tabla de amortización del nuevo leasing 386735.",
      "BCL-L362095 / L336817 / L331330 / L386735", f"={cdm}!F16", "1, 2, 3, 13", "Bancolombia",
-     "Residual de leasing sin explicar queda abierto; 386735 se toma del mayor (NB-1014)."),
+     "Saldo banco estimado con extracto dic-25 (PT 2025) [E]; 386735 se toma del mayor (NB-1014). La diferencia mayor vs detalle quedó explicada por obligación.",
+     "Parcial – estimado con extracto dic-25"),
     ("PEND-3", "Confirmación BBVA del crédito renovado 30-jun-26 ($4.700 MM): número de obligación, tasa y si el interés de julio se pagó (y a qué cuenta se llevó).",
      "BBVA-0141", f'=SUMIFS(Recalculo_Intereses!K{P2_FIRST}:K{P2_LAST},Recalculo_Intereses!A{P2_FIRST}:A{P2_LAST},"BBVA-0141")',
      "5, 13", "BBVA / cliente", "Se incluye en AJE-1 la causación estimada de julio; se retira si se demuestra el pago en 53052020."),
@@ -1221,7 +1797,8 @@ PEND = [
      "DAV-L1019441", 11973677, "11", "Cliente", "Sin ajuste hasta verificar. LEASING_9441-2_DAVIVIENDA.pdf reconfirma el lado del banco; falta la explicación del cliente del registro CL-416.",
      "Parcial – banco reconfirma"),
     ("PEND-8", "Tablas de amortización por obligación para determinar la porción corriente a 12 meses (NIC 1.69).",
-     "Todas", "=Clasif_CP_LP!B11+Clasif_CP_LP!B12", "8", "Cliente", "AJE-2 calculado con el CP del detalle 62 corregido; sujeto a validación."),
+     "Todas", "=Clasif_CP_LP!B11+Clasif_CP_LP!B12", "8, 24", "Cliente", "Tablas recibidas (papel 64): CP calculado por obligación en Clasif_CP_LP. Faltan tablas de 386735, GECOLSA, BBVA 0141 y 1159383796.",
+     "Parcial – tablas recibidas"),
     ("PEND-9", "Materialidad del encargo (global, de ejecución y umbral de errores triviales).",
      "—", None, "Todos", "Socio / gerente del encargo", "Umbral de redondeo $1.000 y tolerancia de recálculo 2% (hoja Resumen, celdas amarillas)."),
     ("PEND-10", "Fechas reales de último pago/canon de Banco Popular y leasings Bancolombia (362095, 336817, 331330) para la causación al corte.",
@@ -1229,6 +1806,12 @@ PEND = [
      "5", "Cliente / bancos", "Fechas estimadas (anotadas en Recalculo_Intereses Parte 2)."),
     ("PEND-11", "Documentación de la prueba del 10% (NIIF 9 B3.3.6) y costos de transacción de las renovaciones BBVA y Bogotá y de la refinanciación Davivienda 8906.",
      "BBVA-0141 / BOG-1159383796 / DAV-8906", None, "15", "Cliente", "Se asume modificación no sustancial a la par, sin costos."),
+    ("PEND-12", "Contrato, tabla de amortización y certificado del leasing Davivienda GECOLSA (2 motogeneradores) registrado en 21202140 y no incluido en el detalle 62.",
+     "DAV-LGECOLSA", f'=SUMIFS({SX("H")},{SX("A")},"DAV-LGECOLSA")', "18", "Davivienda Leasing / cliente", "Se toma el saldo del mayor; sin intereses identificados en 2026."),
+    ("PEND-13", "Aclaración del crédito Davivienda DYPSIS 7000482800190700 ($72.300 MM) incluido en el archivo de tablas: titular, vinculación y garantías de Guaicaramo.",
+     "DYP-482800190700", 72300000000, "23", "Cliente / Davivienda", "No se incluye en el pasivo de Guaicaramo; posible revelación (NIC 24 / garantías)."),
+    ("PEND-14", "Tablas de amortización corregidas: 362095 (error en periodo 5), crédito 1159383796 (Hoja2 copiada) y columna de costo amortizado de créditos Davivienda.",
+     "BCL-L362095 / BOG-1159383796 / DAV-*", None, "20, 21, 22", "Cliente", "Se usan los saldos del mayor y del banco; las tablas no se usan para medir."),
 ]
 r = 5
 PN_FIRST = r
@@ -1315,8 +1898,9 @@ KPIS = [
     ("Saldo de capital según mayor 31-jul (2105 sin TC + 2120)", f"=Gasto_Intereses!B5", NUM),
     ("Saldo según detalle 62", f"=Detalle_62!F{D_TOT}", NUM),
     ("Leasing 386735 omitido en el detalle 62", f"={cdm}!F14", NUM),
-    ("Leasings Bogotá: detalle por debajo de los certificados", f"={cdm}!F15", NUM),
-    ("Diferencia de leasing sin explicar (requiere certificados)", f"={cdm}!F16", NUM),
+    ("Leasing GECOLSA (Davivienda) omitido en el detalle 62", f"={cdm}!F15", NUM),
+    ("Leasings Bogotá: detalle 62 por debajo del mayor/certificados", f"={cdm}!F16", NUM),
+    ("Diferencia de leasing sin explicar (residual)", f"={cdm}!F19", NUM),
     ("% del saldo del detalle 62 cubierto con certificados", f"={C_COBERT}", PCT),
     ("Intereses no causados al 31-jul (AJE-1)", f"=Recalculo_Intereses!K{P2_TOT}", NUM),
     ("Reclasificación LP → CP propuesta (créditos + leasing)", "=Clasif_CP_LP!B11+Clasif_CP_LP!B12", NUM),
@@ -1332,7 +1916,7 @@ put(ws, r, 2, "Conclusión", font=f_sec, border=False)
 r += 1
 concl = [
     "INTEGRIDAD – Mayor vs balance: el movimiento auxiliar de la cuenta 21 cuadra exactamente (débitos, créditos y saldos) con los dos balances de prueba, que son idénticos entre sí. Sin excepción.",
-    "INTEGRIDAD – Detalle 62 vs mayor: los créditos cuadran (diferencia de redondeo $0,67). El leasing NO cuadra: el mayor supera al detalle; la principal causa es el leasing Bancolombia 386735 omitido en el detalle.",
+    "INTEGRIDAD – Detalle 62 vs mayor: los créditos cuadran (diferencia de redondeo $0,67). El leasing NO cuadra ($1.018 MM): leasing Bancolombia 386735 y leasing GECOLSA omitidos y saldos de tablas teóricas en el detalle; la diferencia queda explicada por obligación (Saldos_x_Obligacion).",
     "EXACTITUD – Certificados: los créditos cuadran con los extractos salvo redondeos de abonos a capital (< $5.000). Los leasings de Banco de Bogotá están subvalorados en el detalle 62. Los pagos registrados coinciden con los extractos, salvo el canon 032 del leasing 1019441.",
     "RECÁLCULO – La liquidación bancaria es razonable en base 365 (Bogotá Finagro en base 360), excepto Davivienda 607691/569032, cuya tasa declarada no reconcilia. Hay intereses causados no registrados al 31-jul (AJE-1) por la política de causación del cliente.",
     "PRESENTACIÓN – Se requiere reclasificar la porción corriente (NIC 1.69) y corregir los errores CP/LP del detalle 62. Ver la hoja 'Hallazgos'.",
@@ -1356,14 +1940,314 @@ for nm, ds in [("Mayor_Mov", "Movimiento auxiliar ene–jul con el ID de obligac
                ("Gasto_Intereses", "Prueba analítica del gasto por intereses"),
                ("Clasif_CP_LP", "Clasificación corriente/no corriente (NIC 1)"),
                ("Hallazgos", "Hallazgos, normas y ajustes propuestos"),
-               ("Pendientes", "Información pendiente de soporte y tratamiento provisional")]:
+               ("Pendientes", "Información pendiente de soporte y tratamiento provisional"),
+               ("PT_62", "Papel de trabajo principal (formato PT): aseveraciones, procedimientos, secciones 1–5 y conclusión"),
+               ("Saldos_x_Obligacion", "Saldo por obligación: mayor vs detalle 62 vs tabla vs banco"),
+               ("Mayor_Dic25", "Detalle del mayor al 31-dic-25 (PT 2025) por obligación"),
+               ("Rev_Tablas_Amort", "Revisión y recálculo de tablas de amortización (anexos A01–A25)"),
+               ("Intereses_x_Obligacion", "Intereses 2026 por obligación y cruce de cuentas 2130/5305"),
+               ("Int_Glosas", "Intereses pagados directo al gasto según glosas")]:
     put(ws, r, 2, nm, bold=True)
     put(ws, r, 3, ds)
     ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=6)
     r += 1
 
+# -*- coding: utf-8 -*-
+# Bloque insertado al final de build_cruce_62.py (antes de guardar): hoja principal "PT_62" con formato de papel de trabajo.
+ws = wb.create_sheet("PT_62", 0)
+ws.sheet_view.showGridLines = False
+for i, w in enumerate([4, 6, 22, 30, 17, 17, 17, 17, 17, 15, 12, 13, 13, 18, 16, 16, 16, 16], start=1):
+    ws.column_dimensions[get_column_letter(i)].width = w
+f_box = Font(name=FN, size=9, bold=True, color="1F3864")
+
+
+def txt(r, c, v, font=None, merge_to=None, h=None, wrap=True, border=False, fill=None):
+    cell = ws.cell(row=r, column=c, value=v)
+    cell.font = font or f_base
+    cell.alignment = Alignment(wrap_text=wrap, vertical="top")
+    if fill:
+        cell.fill = fill
+    if border:
+        cell.border = box
+    if merge_to:
+        ws.merge_cells(start_row=r, start_column=c, end_row=r, end_column=merge_to)
+    if h:
+        ws.row_dimensions[r].height = h
+    return cell
+
+
+# Encabezado
+txt(2, 3, "GUAICARAMO S.A.S.", font=f_title, merge_to=9)
+for k, (lab, val) in enumerate([("CLIENTE:", "GUAICARAMO S.A.S."), ("NIT:", "860.040.584-0"),
+                                ("PERIODO:", "1-ene-2026 a 31-jul-2026"), ("FECHA DE CORTE:", "=Resumen!C5"),
+                                ("NOMBRE P/T:", "OBLIGACIONES FINANCIERAS (cuenta 21 – papel 62/64)"),
+                                ("MARCO TÉCNICO:", "NIIF Plenas (Grupo 1): NIIF 9, NIIF 16, NIC 1, NIIF 7, NIC 23, NIC 24"),
+                                ("MONEDA:", "Pesos colombianos (COP)")]):
+    txt(4 + k, 3, lab, font=f_bold)
+    c = txt(4 + k, 4, val, font=f_in if not str(val).startswith("=") else f_link, merge_to=9)
+    if k == 3:
+        c.number_format = DATE
+for c_, lab in ((14, "PREPARADO:"), (15, "REVISADO:"), (16, "Ref. PT")):
+    txt(4, c_, lab, font=f_hdr, fill=fill_hdr, border=True)
+for c_, val in ((14, ""), (15, ""), (16, "62 / 64")):
+    txt(5, c_, val, font=f_in, fill=fill_key if c_ < 16 else None, border=True)
+for c_ in (14, 15):
+    txt(6, c_, "Fecha:", font=f_sub, border=True)
+txt(7, 14, "Iniciales y fecha en celdas amarillas", font=f_sub, merge_to=16)
+
+r = 12
+SEC = lambda rr, t_: (txt(rr, 3, t_, font=f_sec, merge_to=16, fill=fill_sec))
+SEC(r, "OBJETIVO GENERAL")
+r += 1
+txt(r, 3, "Obtener evidencia suficiente y apropiada sobre la razonabilidad de los saldos de obligaciones financieras (créditos y pasivos por "
+          "arrendamiento financiero) e intereses por pagar al 31-jul-2026, y del gasto financiero asociado, verificando integridad, existencia, "
+          "exactitud, valuación a costo amortizado (método del interés efectivo – NIIF 9 §4.2.1 y B5.4; NIIF 16 §36), corte y clasificación "
+          "corriente/no corriente (NIC 1 §69-76), con base en el balance de prueba, el auxiliar contable, el detalle 62, las tablas de "
+          "amortización (papel 64) y los extractos/certificados bancarios.", merge_to=16, h=52)
+r += 2
+SEC(r, "LIMITACIONES AL ALCANCE")
+r += 1
+txt(r, 3, '="Se emite con "&' + PN_COUNT + '&" pendientes de soporte (hoja Pendientes): certificados de saldo al 31-jul-26 de leasings Davivienda y Bancolombia, confirmaciones BBVA y Banco Popular, '
+          'certificado del crédito Bogotá 1159383796, tablas del leasing 386735/GECOLSA y materialidad del encargo. Las conclusiones afectadas se marcan [P]."',
+    merge_to=16, h=40)
+r += 2
+SEC(r, "ASEVERACIONES")
+r += 1
+for c_, lab in enumerate(["Aseveración", "Procedimiento principal", "Hoja soporte", "Resultado"], start=3):
+    txt(r, c_ if c_ < 5 else (5 if c_ == 5 else 9), lab, font=f_hdr, fill=fill_hdr, border=True)
+ws.merge_cells(start_row=r, start_column=5, end_row=r, end_column=8)
+ws.merge_cells(start_row=r, start_column=9, end_row=r, end_column=16)
+ASEV = [
+    ("Existencia / Ocurrencia", "Cotejo con certificados y extractos bancarios; pagos certificados vs comprobantes.", "Certificados",
+     f'="Cobertura con extracto 2026: "&TEXT({C_COBERT},"0%")&"; diferencias de pagos: "&TEXT(Certificados!J{C_PAGOS_TOT},"#,##0")'),
+    ("Integridad", "Movimiento vs balance; detalle 62 vs mayor por obligación; obligaciones del mayor no incluidas en el detalle.", "Saldos_x_Obligacion",
+     f'="Mayor vs balance: "&Resumen!F11&". Leasing mayor − detalle 62: "&TEXT(Cruce_Detalle_Mayor!F7,"#,##0")&" (386735 y GECOLSA no están en el detalle)."'),
+    ("Exactitud / Valuación", "Recálculo de intereses, de las tablas de amortización y de la causación al corte (NIIF 9 B5.4, NIIF 16 §36).", "Recalculo_Intereses / Rev_Tablas_Amort",
+     f'="Causación no registrada al 31-jul: "&TEXT(Recalculo_Intereses!K{P2_TOT},"#,##0")&"; tablas con error: 362095, Hoja2 (1159383796), costo amortizado Davivienda."'),
+    ("Corte", "Causación de intereses entre el último pago y el 31-jul; prórrogas y desembolsos cercanos al cierre.", "Recalculo_Intereses",
+     f'="AJE-1 por "&TEXT(Recalculo_Intereses!K{P2_TOT},"#,##0")'),
+    ("Derechos y obligaciones", "Titularidad de las obligaciones (NIT Guaicaramo) y obligaciones de terceros incluidas en el archivo de tablas.", "Rev_Tablas_Amort",
+     '="Crédito DYPSIS $72.300 MM en el archivo de tablas no está en el mayor: confirmar titular/garantías [P]."'),
+    ("Clasificación y presentación", "Porción corriente según tablas y vencimientos (NIC 1 §69); agrupación de tarjetas de crédito.", "Clasif_CP_LP",
+     f'="Reclasificación LP→CP propuesta: "&TEXT(Clasif_CP_LP!B11+Clasif_CP_LP!B12,"#,##0")'),
+    ("Revelación", "Datos para NIIF 7 (vencimientos, tasas variables IBR/DTF) y NIIF 16 (pasivos por arrendamiento).", "Detalle_62 / Rev_Tablas_Amort",
+     '="Tasas y vencimientos del detalle 62 difieren de los certificados en varias obligaciones (hallazgos 7 y 14)."'),
+]
+r += 1
+for a_, p_, h_, res_ in ASEV:
+    txt(r, 3, a_, font=f_bold, border=True)
+    txt(r, 4, p_, border=True)
+    txt(r, 5, h_, font=f_link, border=True, merge_to=8)
+    txt(r, 9, res_, font=f_base, border=True, merge_to=16)
+    ws.row_dimensions[r].height = 36
+    r += 1
+r += 1
+SEC(r, "TÉCNICAS DE AUDITORÍA APLICADAS")
+r += 1
+txt(r, 3, "☑ Análisis   ☑ Recálculo   ☑ Inspección documental (extractos/certificados)   ☑ Comparación (mayor ↔ detalle ↔ tabla ↔ banco)   ☑ Prueba analítica sustantiva   ☐ Confirmación externa (pendiente)",
+    merge_to=16, h=18)
+r += 2
+SEC(r, "PROCEDIMIENTOS")
+r += 1
+for c_, lab in ((2, "#"), (3, "Procedimiento"), (9, "Ref. hoja"), (12, "Resultado")):
+    txt(r, c_, lab, font=f_hdr, fill=fill_hdr, border=True)
+ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=8)
+ws.merge_cells(start_row=r, start_column=9, end_row=r, end_column=11)
+ws.merge_cells(start_row=r, start_column=12, end_row=r, end_column=16)
+PROC = [
+    ("Cruzar el auxiliar de la cuenta 21 contra el balance de prueba (débitos, créditos y saldos) y comparar las dos versiones del balance.", "Cruce_Mov_Balance", "=Resumen!F11"),
+    ("Reconstruir el saldo del mayor por obligación (detalle 31-dic-25 + movimientos 2026) y cruzarlo con el detalle 62.", "Saldos_x_Obligacion",
+     f'=IF(ABS(Saldos_x_Obligacion!H{SX_CRED[1]})+ABS(Saldos_x_Obligacion!H{SX_LEAS[1]})<=Resumen!$C$6,"Por obligación cuadra con balance","Revisar")'),
+    ("Cotejar saldos, tasas, vencimientos y pagos con extractos/certificados bancarios.", "Certificados", "=Resumen!F16"),
+    ("Revisar y recalcular las tablas de amortización del cliente (papel 64): aritmética, TIR, saldo al corte, porción corriente.", "Rev_Tablas_Amort / A01–A25",
+     f'="Tablas con hallazgos: 362095, Hoja2 (1159383796), costo amortizado Davivienda; "&COUNTIF(Rev_Tablas_Amort!R{RT_FIRST}:R{RT_LAST},"N/D")&" sin saldo banco"'),
+    ("Recalcular intereses liquidados por los bancos y la causación al 31-jul (costo amortizado).", "Recalculo_Intereses / Intereses_x_Obligacion", "=Resumen!F18"),
+    ("Cruzar las cuentas de gasto financiero (5305) y de intereses por pagar (2130) contra la suma por obligación.", "Intereses_x_Obligacion",
+     f'=IF(ABS(Intereses_x_Obligacion!E{IXB_FIRST})<=Resumen!$C$6,"2130 cuadra por obligación","Revisar")'),
+    ("Prueba analítica sustantiva del gasto por intereses.", "Gasto_Intereses", "=Gasto_Intereses!B20"),
+    ("Evaluar la clasificación corriente / no corriente y la presentación.", "Clasif_CP_LP", '="Ver reclasificación AJE-2"'),
+    ("Concluir y documentar hallazgos, ajustes y pendientes.", "Hallazgos / Pendientes", '=' + PN_COUNT + '&" pendientes abiertos"'),
+]
+r += 1
+for n, (p_, h_, res_) in enumerate(PROC, start=1):
+    txt(r, 2, n, border=True)
+    txt(r, 3, p_, border=True, merge_to=8)
+    txt(r, 9, h_, font=f_link, border=True, merge_to=11)
+    txt(r, 12, res_, font=f_bold, border=True, merge_to=16)
+    ws.row_dimensions[r].height = 28
+    r += 1
+r += 1
+SEC(r, "FUENTES DE INFORMACIÓN")
+r += 1
+for f_ in ["[A] Balance de prueba NIIF a jul-2026 (Balance_2026_GUUU.xlsx – 24-ago-26 – y Obl_Financieros.xlsx/Hoja1 – 29-sep-26).",
+           "[A] Auxiliar cuenta 21 ene–jul 2026 (Obl_Financieros.xlsx/Sheet1).",
+           "[A] Detalle de obligaciones financieras a jul-26 (62._Obligaciones_Financieras.xlsx).",
+           "[A] Tablas de amortización (64._Tabla_amortización_obligaciones_financieras.xlsm).",
+           "[A] PT Obligaciones Financieras al 31-dic-2025 (ejemplo.xlsx): detalle del mayor por obligación y saldos de extractos a dic-25.",
+           "[C] Extractos/certificados bancarios (ilovepdf_merged_1.pdf; LEASING_1275-3/9441-2/9448-3_DAVIVIENDA.pdf)."]:
+    txt(r, 3, f_, merge_to=16)
+    r += 1
+r += 1
+
+# ******* 1 ******* Prueba cuenta vs detalle
+SEC(r, "******* 1 *******   Prueba de auditoría – Cuentas del balance vs detalle 62 vs saldo por obligación")
+r += 1
+hdr1 = ["CUENTA", "DESCRIPCIÓN", "SALDO BALANCE 31/07/2026", "SALDO DETALLE 62", "SALDO POR OBLIGACIÓN (mayor)", "DIF. BALANCE − DETALLE 62",
+        "DIF. BALANCE − POR OBLIGACIÓN", "MARCA"]
+for k, lab in enumerate(hdr1):
+    txt(r, 3 + k, lab, font=f_hdr, fill=fill_hdr, border=True)
+ws.row_dimensions[r].height = 30
+r += 1
+P1_ROWS = [
+    ("210501 + 210502", "Créditos (sin tarjetas de crédito)", f"=-({BAL('21050100', 'SF')}+{BAL('21050201', 'SF')})",
+     f'=SUMIFS({DR("F")},{DR("D")},"Crédito")', f"=Saldos_x_Obligacion!H{SX_CRED[0]}"),
+    ("212020 + 212021", "Leasing financiero (NIIF 16)", f"=-({BAL('21202040', 'SF')}+{BAL('21202140', 'SF')})",
+     f'=SUMIFS({DR("F")},{DR("D")},"Leasing")', f"=Saldos_x_Obligacion!H{SX_LEAS[0]}"),
+    ("213001", "Intereses financieros por pagar", f"=-{BAL('2130', 'SF')}", "No incluido", f"=Intereses_x_Obligacion!F{IX_TOT}"),
+    ("21050301", "Tarjetas de crédito por pagar", f"=-{BAL('21050301', 'SF')}", "No incluido", "N/A"),
+]
+p1_first = r
+for cta, des, a_, b_, c__ in P1_ROWS:
+    txt(r, 3, cta, font=f_in, border=True)
+    txt(r, 4, des, border=True)
+    for k, v in enumerate((a_, b_, c__)):
+        cell = txt(r, 5 + k, v, border=True)
+        cell.number_format = NUM
+        cell.font = f_link if str(v).startswith("=") and "!" in str(v) else f_base
+    for k, (x, y) in enumerate((("E", "F"), ("E", "G"))):
+        cell = txt(r, 8 + k, f'=IF(AND(ISNUMBER({x}{r}),ISNUMBER({y}{r})),{x}{r}-{y}{r},"N/A")', border=True)
+        cell.number_format = NUM
+    txt(r, 10, "[D] [A]", font=f_sub, border=True)
+    r += 1
+txt(r, 4, "TOTAL", font=f_bold, border=True, fill=fill_tot)
+for c_ in (5, 6, 7, 8, 9):
+    L = get_column_letter(c_)
+    cell = txt(r, c_, f"=SUM({L}{p1_first}:{L}{r - 1})", font=f_bold, border=True, fill=fill_tot)
+    cell.number_format = NUM
+r += 2
+
+# ******* 2 ******* Validación por terceros y número de obligación
+SEC(r, "******* 2 *******   Validación por terceros y número de obligación financiera (saldo mayor vs detalle vs tabla vs extracto)")
+r += 1
+hdr2 = ["N° obligación (ID)", "Descripción", "Saldo mayor 31-jul", "Saldo detalle 62", "Saldo tabla amort.", "Saldo extracto/banco",
+        "Dif. mayor − banco", "Tipo tasa", "Frecuencia", "Fecha venc.", "Tasa EA banco", "Intereses 2026 registrados",
+        "Int. por pagar 2130", "Causación recalc. 31-jul", "Marca"]
+for bank_, ids in SX_IDS:
+    txt(r, 3, bank_.title(), font=f_box)
+    r += 1
+    for k, lab in enumerate(hdr2):
+        txt(r, 3 + k, lab, font=f_hdr, fill=fill_hdr, border=True)
+    ws.row_dimensions[r].height = 30
+    r += 1
+    b_first = r
+    for ident in ids:
+        sx = SX_ROW[ident]
+        txt(r, 3, ident, font=f_bold, border=True)
+        txt(r, 4, f"=Saldos_x_Obligacion!D{sx}", font=f_link, border=True)
+        for k, col in enumerate(("H", "I", "J", "L", "O")):
+            cell = txt(r, 5 + k, f"=Saldos_x_Obligacion!{col}{sx}", font=f_link, border=True)
+            cell.number_format = NUM
+        txt(r, 10, f'=IFERROR(INDEX({DR("H")},MATCH(C{r},{DR("C")},0)),"—")', font=f_link, border=True)
+        txt(r, 11, f'=IFERROR(INDEX({DR("L")},MATCH(C{r},{DR("C")},0)),"—")', font=f_link, border=True)
+        cell = txt(r, 12, f'=IFERROR(INDEX({DR("P")},MATCH(C{r},{DR("C")},0)),"—")', font=f_link, border=True)
+        cell.number_format = DATE
+        cell = txt(r, 13, f'=IFERROR(INDEX(Certificados!$M:$M,MATCH(C{r},Certificados!$E:$E,0)),"—")', font=f_link, border=True)
+        cell.number_format = PCT
+        for k, (sheet_, col) in enumerate((("Intereses_x_Obligacion", "I"), ("Intereses_x_Obligacion", "F"), ("Intereses_x_Obligacion", "L"))):
+            cell = txt(r, 14 + k, f"=INDEX({sheet_}!${col}:${col},MATCH(C{r},{sheet_}!$A:$A,0))", font=f_link, border=True)
+            cell.number_format = NUM
+        txt(r, 17, f'=IF(LEFT(Saldos_x_Obligacion!M{sx},3)="[C]","[C] [B]",IF(LEFT(Saldos_x_Obligacion!M{sx},3)="[E]","[E] [B]","[P]"))', border=True)
+        r += 1
+    txt(r, 4, "Subtotal", font=f_bold, border=True, fill=fill_tot)
+    for c_ in (5, 6, 7, 8, 9, 14, 15, 16):
+        L = get_column_letter(c_)
+        cell = txt(r, c_, f"=SUM({L}{b_first}:{L}{r - 1})", font=f_bold, border=True, fill=fill_tot)
+        cell.number_format = NUM
+    r += 2
+
+# ******* 3 ******* Cuentas de intereses
+SEC(r, "******* 3 *******   Cuentas de intereses del balance vs suma por obligación (causación, pagos y gasto)")
+r += 1
+for k, lab in enumerate(["Código", "Cuenta contable", "Saldo / mov. balance", "Valor según obligaciones", "Diferencia"]):
+    txt(r, 3 + k, lab, font=f_hdr, fill=fill_hdr, border=True)
+r += 1
+for rr_ in range(IXB_FIRST, IXB_LAST + 1):
+    for k, col in enumerate("ABCDE"):
+        cell = txt(r, 3 + k, f"=Intereses_x_Obligacion!{col}{rr_}", font=f_link, border=True)
+        if k >= 2:
+            cell.number_format = NUM
+    r += 1
+r += 1
+
+# ******* 4 ******* Revisión de tablas
+SEC(r, "******* 4 *******   Revisión y recálculo de tablas de amortización (papel 64) – ver Rev_Tablas_Amort y anexos A01–A25")
+r += 1
+for k, lab in enumerate(["Concepto", "", "Tabla", "Detalle 62", "Banco", "Diferencia"]):
+    txt(r, 3 + k, lab, font=f_hdr, fill=fill_hdr, border=True)
+r += 1
+for lab, a_, b_, c__ in [
+    ("Saldo al 31-jul (obligaciones con tabla en el mayor)", f"=Rev_Tablas_Amort!N{RT_TOT}", f"=Rev_Tablas_Amort!O{RT_TOT}", f"=Rev_Tablas_Amort!Q{RT_TOT}"),
+    ("Interés ene–jul 2026 (tabla vs registrado)", f"=Rev_Tablas_Amort!S{RT_TOT}", "", f"=Rev_Tablas_Amort!T{RT_TOT}"),
+    ("Porción corriente 12 meses (tabla vs detalle)", f"=Rev_Tablas_Amort!V{RT_TOT}", f"=Rev_Tablas_Amort!W{RT_TOT}", ""),
+]:
+    txt(r, 3, lab, border=True, merge_to=4)
+    for k, v in enumerate((a_, b_, c__)):
+        cell = txt(r, 5 + k, v, font=f_link, border=True)
+        cell.number_format = NUM
+    cell = txt(r, 8, f'=IF(ISNUMBER(G{r}),E{r}-G{r},IF(ISNUMBER(F{r}),E{r}-F{r},"N/A"))', border=True)
+    cell.number_format = NUM
+    r += 1
+r += 1
+
+# ******* 5 ******* Ajustes
+SEC(r, "******* 5 *******   Ajustes y reclasificaciones propuestos (detalle en hoja Hallazgos)")
+r += 1
+for k, lab in enumerate(["AJE", "Cuenta", "Descripción", "Débito", "Crédito"]):
+    txt(r, 3 + k, lab, font=f_hdr, fill=fill_hdr, border=True)
+r += 1
+for rr_ in range(A_FIRST_H, A_LAST_H + 1):
+    for k, col in enumerate("ABCDE"):
+        cell = txt(r, 3 + k, f'=IF(Hallazgos!{col}{rr_}="","",Hallazgos!{col}{rr_})', font=f_link, border=True)
+        if k >= 3:
+            cell.number_format = NUM
+    r += 1
+r += 1
+
+# Conclusión
+SEC(r, "CONCLUSIÓN")
+r += 1
+txt(r, 3, '="Con base en los procedimientos aplicados, el auxiliar de la cuenta 21 cuadra con el balance y el saldo reconstruido por obligación explica el 100% del balance. '
+          'El detalle 62 del cliente NO es confiable para leasing: proviene de tablas teóricas (tasa fija) y omite el leasing Bancolombia 386735 y el leasing GECOLSA (Davivienda). '
+          'Los créditos cuadran con los extractos (redondeos). Se proponen el AJE-1 por "&TEXT(Recalculo_Intereses!K' + str(P2_TOT) + ',"$#,##0")&" de intereses no causados al corte '
+          'y el AJE-2 de reclasificación a corto plazo. La conclusión queda sujeta a los "&' + PN_COUNT + '&" pendientes de soporte."',
+    merge_to=16, h=70)
+r += 2
+SEC(r, "MARCAS DE AUDITORÍA")
+r += 1
+for m_, d_ in [("[A]", "Información suministrada por el cliente"), ("[B]", "Cálculos / recálculos realizados por auditoría"),
+               ("[C]", "Cotejado con extracto o certificado bancario 2026"), ("[D]", "Cotejado con balance de prueba / mayor"),
+               ("[E]", "Estimado: extracto al 31-dic-25 (PT 2025) + movimientos 2026 – pendiente certificado"), ("[P]", "Pendiente de soporte")]:
+    txt(r, 2, m_, font=f_bold)
+    txt(r, 3, d_, merge_to=10)
+    r += 1
+r += 1
+SEC(r, "VER SOPORTES / ANEXOS (clic para abrir)")
+r += 1
+links = ["Resumen", "Hallazgos", "Pendientes", "Saldos_x_Obligacion", "Mayor_Dic25", "Certificados", "Rev_Tablas_Amort",
+         "Intereses_x_Obligacion", "Int_Glosas", "Recalculo_Intereses", "Clasif_CP_LP", "Gasto_Intereses", "Cruce_Detalle_Mayor",
+         "Cruce_Mov_Balance", "Detalle_62", "Mayor_Mov", "Balance_21"] + [ANX[i]["sh"] for i in ANX_ORDER]
+for k, nm in enumerate(links):
+    cc = 3 + (k % 4) * 3
+    rr_ = r + k // 4
+    cell = ws.cell(row=rr_, column=cc, value=nm)
+    cell.font = Font(name=FN, size=9, color="0563C1", underline="single")
+    cell.hyperlink = f"#'{nm}'!A1"
+ws.freeze_panes = "A4"
+ws.sheet_properties.tabColor = "C00000"
+
 for w in wb.worksheets:
-    w.sheet_properties.tabColor = {"Resumen": "1F3864", "Hallazgos": "C00000"}.get(w.title, "8EA9DB")
+    w.sheet_properties.tabColor = {"PT_62": "C00000", "Resumen": "1F3864", "Hallazgos": "C00000", "Pendientes": "C00000"}.get(
+        w.title, "A9D08E" if re.match(r"A\d\d-", w.title) else "8EA9DB")
     w.page_setup.orientation = "landscape"
     w.sheet_properties.pageSetUpPr.fitToPage = True
     w.page_setup.fitToWidth = 1
