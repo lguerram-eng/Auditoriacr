@@ -1062,7 +1062,10 @@ for bank, num, ident, rr in det:
 ws = ws_new("Hallazgos", "Hallazgos, referencias NIIF y ajustes propuestos",
             "Montos vinculados a las hojas de trabajo. Ajustes sujetos a la materialidad del encargo (no informada).",
             [5, 16, 70, 18, 26, 55])
-header(ws, 4, ["#", "Afirmación", "Hallazgo", "Monto (COP)", "Referencia normativa", "Recomendación / acción"])
+header(ws, 4, ["#", "Afirmación", "Hallazgo", "Monto (COP)", "Referencia normativa", "Recomendación / acción", "Estado"])
+ws.column_dimensions["G"].width = 24
+H_PEND = {2: "PEND-1, PEND-2", 3: "PEND-1, PEND-2", 5: "PEND-3, PEND-5, PEND-10", 6: "PEND-6", 8: "PEND-8",
+          11: "PEND-7", 13: "PEND-1 a PEND-5", 15: "PEND-11"}
 cdm = "Cruce_Detalle_Mayor"
 H = [
     ("Integridad", "El leasing Bancolombia 386735 (camión VW Constellation, IBR TV + 1,35) se registró en el mayor el 28-jul-26 (NB-00001014) pero NO está en el detalle 62 del cliente.",
@@ -1109,6 +1112,8 @@ for n, (af, txt, monto, ref, rec) in enumerate(H, start=1):
     put(ws, r, 4, monto if monto is not None else "Cualitativo", fmt=NUM, font=f_in if isinstance(monto, (int, float)) else None)
     put(ws, r, 5, ref, wrap=True)
     put(ws, r, 6, rec, wrap=True)
+    put(ws, r, 7, f"Pendiente de soporte ({H_PEND[n]})" if n in H_PEND else "Concluido", wrap=True,
+        fill=fill_bad if n in H_PEND else None, bold=True)
     ws.row_dimensions[r].height = 64
     H_ROW[n] = r
     r += 1
@@ -1143,6 +1148,66 @@ r += 1
 put(ws, r, 3, "AJE-2 depende de validar la porción corriente del detalle 62 con tablas de amortización; el saldo del leasing (diferencia de $1.018 MM) se ajustará cuando se obtengan los certificados faltantes.",
     font=f_sub, border=False)
 
+# ============================================================================ 10b. PENDIENTES
+ws = ws_new("Pendientes", "Pendientes de soporte – el papel se emite sin esta información",
+            "Las cifras afectadas se dejan calculadas con la información disponible y supuestos documentados; se actualizarán al recibir el soporte.",
+            [9, 62, 22, 18, 16, 22, 14, 50])
+header(ws, 4, ["Ref.", "Pendiente / información requerida", "Obligación (ID)", "Monto afectado (COP)", "Hallazgo relacionado",
+               "Solicitar a", "Estado", "Tratamiento provisional en este papel"], height=36)
+PEND = [
+    ("PEND-1", "Certificados de saldo de capital al 31-jul-26 de los leasings Davivienda 1019441-2, 1019448-3 y 1021275-3 (los extractos sólo traen la factura del canon).",
+     "DAV-L1019441 / L1019448 / L1021275", f"=Recalculo_Intereses!K{P3_TOT}", "2, 3, 13", "Davivienda Leasing",
+     "Se usa el saldo del detalle 62; saldo implícito estimado en Recalculo_Intereses Parte 3."),
+    ("PEND-2", "Certificados de saldo de los leasings Bancolombia 362095, 336817, 331330 y contrato + tabla de amortización del nuevo leasing 386735.",
+     "BCL-L362095 / L336817 / L331330 / L386735", f"={cdm}!F16", "1, 2, 3, 13", "Bancolombia",
+     "Residual de leasing sin explicar queda abierto; 386735 se toma del mayor (NB-1014)."),
+    ("PEND-3", "Confirmación BBVA del crédito renovado 30-jun-26 ($4.700 MM): número de obligación, tasa y si el interés de julio se pagó (y a qué cuenta se llevó).",
+     "BBVA-0141", f'=SUMIFS(Recalculo_Intereses!K{P2_FIRST}:K{P2_LAST},Recalculo_Intereses!A{P2_FIRST}:A{P2_LAST},"BBVA-0141")',
+     "5, 13", "BBVA / cliente", "Se incluye en AJE-1 la causación estimada de julio; se retira si se demuestra el pago en 53052020."),
+    ("PEND-4", "Confirmación Banco Popular del crédito 631309940-2 (saldo, tasa, fechas de cuota).",
+     "POP-631309940", f'=SUMIFS({DR("F")},{DR("C")},"POP-631309940")', "13", "Banco Popular",
+     "Saldo del detalle 62; inicio de causación estimado 17-jun."),
+    ("PEND-5", "Certificado del nuevo crédito Bogotá 1159383796 (prórroga del 1155297469): fecha de inicio, tasa y si hubo intereses entre el 14 y el 22-jul.",
+     "BOG-1159383796", f'=SUMIFS(Recalculo_Intereses!K{P2_FIRST}:K{P2_LAST},Recalculo_Intereses!A{P2_FIRST}:A{P2_LAST},"BOG-1159383796")',
+     "5, 13", "Banco de Bogotá", "Inicio estimado 22-jul con tasa del detalle 62 (IBR 3M + 0,8)."),
+    ("PEND-6", "Liquidación detallada Davivienda créditos 607691 y 569032 (IBR aplicado y spread): la tasa declarada 12,58% EA no reconcilia con lo facturado.",
+     "DAV-607691 / DAV-569032", f"=Recalculo_Intereses!K{P1_FIRST + 1}+Recalculo_Intereses!K{P1_FIRST + 2}", "6", "Davivienda",
+     "Se acepta lo facturado (coincide con lo contabilizado); diferencia de tasa queda abierta."),
+    ("PEND-7", "Estado de cuenta del leasing Davivienda 1019441: aplicación del pago del canon 032 (banco: sólo intereses $1.029.562; contabilidad: capital $11.973.677).",
+     "DAV-L1019441", 11973677, "11", "Davivienda Leasing / cliente", "Sin ajuste hasta verificar."),
+    ("PEND-8", "Tablas de amortización por obligación para determinar la porción corriente a 12 meses (NIC 1.69).",
+     "Todas", "=Clasif_CP_LP!B11+Clasif_CP_LP!B12", "8", "Cliente", "AJE-2 calculado con el CP del detalle 62 corregido; sujeto a validación."),
+    ("PEND-9", "Materialidad del encargo (global, de ejecución y umbral de errores triviales).",
+     "—", None, "Todos", "Socio / gerente del encargo", "Umbral de redondeo $1.000 y tolerancia de recálculo 2% (hoja Resumen, celdas amarillas)."),
+    ("PEND-10", "Fechas reales de último pago/canon de Banco Popular y leasings Bancolombia (362095, 336817, 331330) para la causación al corte.",
+     "POP / BCL-L*", f'=SUMIFS(Recalculo_Intereses!K{P2_FIRST}:K{P2_LAST},Recalculo_Intereses!A{P2_FIRST}:A{P2_LAST},"BCL-L*")+SUMIFS(Recalculo_Intereses!K{P2_FIRST}:K{P2_LAST},Recalculo_Intereses!A{P2_FIRST}:A{P2_LAST},"POP-*")',
+     "5", "Cliente / bancos", "Fechas estimadas (anotadas en Recalculo_Intereses Parte 2)."),
+    ("PEND-11", "Documentación de la prueba del 10% (NIIF 9 B3.3.6) y costos de transacción de las renovaciones BBVA y Bogotá y de la refinanciación Davivienda 8906.",
+     "BBVA-0141 / BOG-1159383796 / DAV-8906", None, "15", "Cliente", "Se asume modificación no sustancial a la par, sin costos."),
+]
+r = 5
+PN_FIRST = r
+for ref, txt, ident, monto, hz, quien, trat in PEND:
+    put(ws, r, 1, ref, bold=True)
+    put(ws, r, 2, txt, wrap=True)
+    put(ws, r, 3, ident, wrap=True)
+    put(ws, r, 4, monto if monto is not None else "Cualitativo", fmt=NUM, font=f_in if isinstance(monto, (int, float)) else None)
+    put(ws, r, 5, hz)
+    put(ws, r, 6, quien, wrap=True)
+    put(ws, r, 7, "Pendiente", bold=True, fill=fill_bad)
+    put(ws, r, 8, trat, wrap=True)
+    ws.row_dimensions[r].height = 52
+    r += 1
+PN_LAST = r - 1
+r += 1
+put(ws, r, 2, "Pendientes abiertos", bold=True, fill=fill_tot)
+put(ws, r, 4, f'=COUNTIF(G{PN_FIRST}:G{PN_LAST},"Pendiente")', fmt=NUM0, bold=True, fill=fill_tot)
+PN_COUNT = f"Pendientes!$D${r}"
+r += 1
+put(ws, r, 2, "Instrucción: al recibir un soporte, cambiar el Estado a 'Recibido', actualizar los datos de entrada (azul) en la hoja correspondiente y recalcular.",
+    font=f_sub, border=False)
+ws.freeze_panes = "B5"
+
 # ============================================================================ 11. RESUMEN
 ws = wb.create_sheet("Resumen", 0)
 ws.sheet_view.showGridLines = False
@@ -1161,6 +1226,10 @@ put(ws, 6, 3, 1000, font=f_in, fmt=NUM, fill=fill_key)
 note(ws, 6, 3, "Supuesto de auditoría: diferencias de hasta $1.000 se consideran redondeo. Ajustar según la materialidad del encargo.")
 put(ws, 7, 2, "Tolerancia recálculo de intereses (%)")
 put(ws, 7, 3, 0.02, font=f_in, fmt=PCT, fill=fill_key)
+put(ws, 4, 5, "Estado del papel", font=f_sec, border=False)
+put(ws, 5, 5, '="Emitido con " & ' + PN_COUNT + ' & " pendientes"', bold=True, fill=fill_bad)
+ws.merge_cells("E5:F5")
+put(ws, 6, 5, "Ver hoja 'Pendientes'", font=f_sub, border=False)
 note(ws, 7, 3, "Supuesto de auditoría: ±2% por diferencias de convención (días/base, fecha de fijación del IBR/DTF).")
 
 put(ws, 9, 2, "Resultados por prueba", font=f_sec, border=False)
@@ -1221,6 +1290,7 @@ concl = [
     "EXACTITUD – Certificados: los créditos cuadran con los extractos salvo redondeos de abonos a capital (< $5.000). Los leasings de Banco de Bogotá están subvalorados en el detalle 62. Los pagos registrados coinciden con los extractos, salvo el canon 032 del leasing 1019441.",
     "RECÁLCULO – La liquidación bancaria es razonable en base 365 (Bogotá Finagro en base 360), excepto Davivienda 607691/569032, cuya tasa declarada no reconcilia. Hay intereses causados no registrados al 31-jul (AJE-1) por la política de causación del cliente.",
     "PRESENTACIÓN – Se requiere reclasificar la porción corriente (NIC 1.69) y corregir los errores CP/LP del detalle 62. Ver la hoja 'Hallazgos'.",
+    "PENDIENTES – El papel se emite sin certificados de saldo de leasings Davivienda/Bancolombia, sin confirmaciones de BBVA, Banco Popular y del crédito Bogotá 1159383796, sin tablas de amortización y sin materialidad del encargo. Las conclusiones afectadas quedan 'Pendiente de soporte' (ver hoja 'Pendientes').",
 ]
 for t in concl:
     put(ws, r, 2, t, wrap=True)
@@ -1239,7 +1309,8 @@ for nm, ds in [("Mayor_Mov", "Movimiento auxiliar ene–jul con el ID de obligac
                ("Recalculo_Intereses", "Recálculo de la liquidación bancaria, causación al corte y saldos implícitos"),
                ("Gasto_Intereses", "Prueba analítica del gasto por intereses"),
                ("Clasif_CP_LP", "Clasificación corriente/no corriente (NIC 1)"),
-               ("Hallazgos", "Hallazgos, normas y ajustes propuestos")]:
+               ("Hallazgos", "Hallazgos, normas y ajustes propuestos"),
+               ("Pendientes", "Información pendiente de soporte y tratamiento provisional")]:
     put(ws, r, 2, nm, bold=True)
     put(ws, r, 3, ds)
     ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=6)
