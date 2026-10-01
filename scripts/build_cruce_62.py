@@ -16,6 +16,7 @@ import openpyxl
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.hyperlink import Hyperlink
 
 UP = sys.argv[1] if len(sys.argv) > 1 else "/root/.claude/uploads/9b3ddf83-4eba-59aa-a915-ef35201f01de"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "Cruce_Obligaciones_Financieras_62_Jul2026.xlsx"
@@ -26,26 +27,27 @@ F_BAL = f"{UP}/a3876b2a-Balance_2026_GUUU.xlsx"
 CORTE = dt.date(2026, 7, 31)
 
 # ----------------------------------------------------------------------------- estilos
-FN = "Arial"
-f_base = Font(name=FN, size=9)
-f_in = Font(name=FN, size=9, color="0000FF")
-f_link = Font(name=FN, size=9, color="008000")
-f_bold = Font(name=FN, size=9, bold=True)
-f_hdr = Font(name=FN, size=9, bold=True, color="FFFFFF")
-f_title = Font(name=FN, size=13, bold=True, color="1F3864")
-f_sub = Font(name=FN, size=9, italic=True, color="595959")
-f_sec = Font(name=FN, size=10, bold=True, color="1F3864")
-fill_hdr = PatternFill("solid", fgColor="1F3864")
-fill_sec = PatternFill("solid", fgColor="D9E1F2")
-fill_tot = PatternFill("solid", fgColor="F2F2F2")
-fill_key = PatternFill("solid", fgColor="FFFF00")
-fill_bad = PatternFill("solid", fgColor="FCE4D6")
-thin = Side(style="thin", color="BFBFBF")
+FN = "Arial Narrow"
+f_base = Font(name=FN, size=8)
+f_in = Font(name=FN, size=8)
+f_link = Font(name=FN, size=8)
+f_bold = Font(name=FN, size=8, bold=True)
+f_hdr = Font(name=FN, size=8, bold=True, color="FFFFFF")
+f_title = Font(name=FN, size=10, bold=True, color="002060")
+f_sub = Font(name=FN, size=8, italic=True, color="595959")
+f_sec = Font(name=FN, size=8, bold=True, color="0070C0")
+fill_hdr = PatternFill("solid", fgColor="002060")
+fill_sec = PatternFill(fill_type=None)
+fill_tot = PatternFill("solid", fgColor="DDEBF7")
+YELLOW = "FFFF99"
+fill_key = PatternFill("solid", fgColor=YELLOW)
+fill_bad = PatternFill("solid", fgColor="FFC7CE")
+thin = Side(style="thin", color="808080")
 box = Border(top=thin, bottom=thin, left=thin, right=thin)
-NUM = '#,##0.00;(#,##0.00);"-"'
-NUM0 = '#,##0;(#,##0);"-"'
-PCT = '0.00%;(0.00%);"-"'
-PB = '#,##0.0" pb";(#,##0.0" pb");"-"'
+NUM = '_-* #,##0_-;\\-* #,##0_-;_-* "-"??_-;_-@_-'
+NUM0 = NUM
+PCT = '0.00%;-0.00%;"-"'
+PB = '#,##0.0" pb";-#,##0.0" pb";"-"'
 DATE = "yyyy-mm-dd"
 
 wb = openpyxl.Workbook()
@@ -54,7 +56,7 @@ wb.remove(wb.active)
 
 def ws_new(name, title, subtitle, widths):
     ws = wb.create_sheet(name)
-    ws.sheet_view.showGridLines = False
+    ws.sheet_view.showGridLines = True
     ws["A1"] = title
     ws["A1"].font = f_title
     ws["A2"] = subtitle
@@ -1839,7 +1841,7 @@ ws.freeze_panes = "B5"
 
 # ============================================================================ 11. RESUMEN
 ws = wb.create_sheet("Resumen", 0)
-ws.sheet_view.showGridLines = False
+ws.sheet_view.showGridLines = True
 for i, w in enumerate([4, 62, 20, 20, 20, 16], start=1):
     ws.column_dimensions[get_column_letter(i)].width = w
 ws["A1"] = "GUAICARAMO S.A.S. – Auditoría de Obligaciones Financieras (cuenta 21 / papel 62) – corte 31-jul-2026"
@@ -1932,19 +1934,16 @@ put(ws, r, 2, "Hojas del libro", font=f_sec, border=False)
 r += 1
 for nm, ds in [("Mayor_Mov", "Movimiento auxiliar ene–jul con el ID de obligación asignado por auditoría"),
                ("Balance_21", "Cuentas 21/5305 de ambos balances de prueba y su comparación"),
-               ("Cruce_Mov_Balance", "Integridad: movimiento vs balance, jerarquía de cuentas y relación pasivo–gasto"),
+               ("Pruebas_Auditoria", "Bloques 1–4: movimiento vs balance, certificados bancarios, saldo por obligación y recálculo de intereses (cálculos en amarillo)"),
+               ("Tablas_Amortizacion", "Revisión y recálculo de las 25 tablas de amortización del cliente (recálculo en amarillo)"),
                ("Detalle_62", "Detalle del cliente con recálculo de tasas, subtotales y CP/LP"),
                ("Cruce_Detalle_Mayor", "Detalle 62 vs mayor y roll-forward de capital por obligación"),
-               ("Certificados", "Detalle 62 vs extractos bancarios del PDF y pagos certificados vs contabilidad"),
-               ("Recalculo_Intereses", "Recálculo de la liquidación bancaria, causación al corte y saldos implícitos"),
                ("Gasto_Intereses", "Prueba analítica del gasto por intereses"),
                ("Clasif_CP_LP", "Clasificación corriente/no corriente (NIC 1)"),
                ("Hallazgos", "Hallazgos, normas y ajustes propuestos"),
                ("Pendientes", "Información pendiente de soporte y tratamiento provisional"),
                ("PT_62", "Papel de trabajo principal (formato PT): aseveraciones, procedimientos, secciones 1–5 y conclusión"),
-               ("Saldos_x_Obligacion", "Saldo por obligación: mayor vs detalle 62 vs tabla vs banco"),
                ("Mayor_Dic25", "Detalle del mayor al 31-dic-25 (PT 2025) por obligación"),
-               ("Rev_Tablas_Amort", "Revisión y recálculo de tablas de amortización (anexos A01–A25)"),
                ("Intereses_x_Obligacion", "Intereses 2026 por obligación y cruce de cuentas 2130/5305"),
                ("Int_Glosas", "Intereses pagados directo al gasto según glosas")]:
     put(ws, r, 2, nm, bold=True)
@@ -1955,7 +1954,7 @@ for nm, ds in [("Mayor_Mov", "Movimiento auxiliar ene–jul con el ID de obligac
 # -*- coding: utf-8 -*-
 # Bloque insertado al final de build_cruce_62.py (antes de guardar): hoja principal "PT_62" con formato de papel de trabajo.
 ws = wb.create_sheet("PT_62", 0)
-ws.sheet_view.showGridLines = False
+ws.sheet_view.showGridLines = True
 for i, w in enumerate([4, 6, 22, 30, 17, 17, 17, 17, 17, 15, 12, 13, 13, 18, 16, 16, 16, 16], start=1):
     ws.column_dimensions[get_column_letter(i)].width = w
 f_box = Font(name=FN, size=9, bold=True, color="1F3864")
@@ -1990,13 +1989,21 @@ for k, (lab, val) in enumerate([("CLIENTE:", "GUAICARAMO S.A.S."), ("NIT:", "860
 for c_, lab in ((14, "PREPARADO:"), (15, "REVISADO:"), (16, "Ref. PT")):
     txt(4, c_, lab, font=f_hdr, fill=fill_hdr, border=True)
 for c_, val in ((14, ""), (15, ""), (16, "62 / 64")):
-    txt(5, c_, val, font=f_in, fill=fill_key if c_ < 16 else None, border=True)
+    txt(5, c_, val, font=Font(name=FN, size=8, bold=True, color="FF0000"), border=True)
 for c_ in (14, 15):
     txt(6, c_, "Fecha:", font=f_sub, border=True)
-txt(7, 14, "Iniciales y fecha en celdas amarillas", font=f_sub, merge_to=16)
+txt(7, 14, "Iniciales y fecha del preparador / revisor", font=f_sub, merge_to=16)
 
 r = 12
 SEC = lambda rr, t_: (txt(rr, 3, t_, font=f_sec, merge_to=16, fill=fill_sec))
+SEC(r, "CÓMO LEER ESTE PAPEL (guía rápida)")
+for gl in ["1. Esta hoja resume TODO el trabajo: qué se revisó, cómo y qué se encontró. Las hojas de soporte están enlazadas al final (clic en el nombre).",
+           "2. Celdas BLANCAS = información del cliente, del balance o del banco.   Celdas AMARILLAS = cálculos y recálculos hechos por auditoría.",
+           "3. 'OK' = la cifra cuadra.   'DIFERENCIA' = hay que revisar (la explicación está en la hoja 'Hallazgos').   [P] = falta un soporte (hoja 'Pendientes').",
+           "4. Orden sugerido de lectura: Conclusión (al final) → secciones 1 a 5 → hoja 'Pruebas_Auditoria' → hoja 'Tablas_Amortizacion' → 'Hallazgos'."]:
+    r += 1
+    txt(r, 3, gl, merge_to=16, h=14)
+r += 2
 SEC(r, "OBJETIVO GENERAL")
 r += 1
 txt(r, 3, "Obtener evidencia suficiente y apropiada sobre la razonabilidad de los saldos de obligaciones financieras (créditos y pasivos por "
@@ -2233,21 +2240,87 @@ for m_, d_ in [("[A]", "Información suministrada por el cliente"), ("[B]", "Cá
 r += 1
 SEC(r, "VER SOPORTES / ANEXOS (clic para abrir)")
 r += 1
-links = ["Resumen", "Hallazgos", "Pendientes", "Saldos_x_Obligacion", "Mayor_Dic25", "Certificados", "Rev_Tablas_Amort",
-         "Intereses_x_Obligacion", "Int_Glosas", "Recalculo_Intereses", "Clasif_CP_LP", "Gasto_Intereses", "Cruce_Detalle_Mayor",
-         "Cruce_Mov_Balance", "Detalle_62", "Mayor_Mov", "Balance_21"] + [ANX[i]["sh"] for i in ANX_ORDER]
+links = ["Resumen", "Pruebas_Auditoria", "Tablas_Amortizacion", "Hallazgos", "Pendientes", "Cruce_Detalle_Mayor",
+         "Intereses_x_Obligacion", "Clasif_CP_LP", "Gasto_Intereses", "Detalle_62", "Mayor_Dic25", "Mayor_Mov", "Balance_21", "Int_Glosas"]
 for k, nm in enumerate(links):
     cc = 3 + (k % 4) * 3
     rr_ = r + k // 4
     cell = ws.cell(row=rr_, column=cc, value=nm)
     cell.font = Font(name=FN, size=9, color="0563C1", underline="single")
-    cell.hyperlink = f"#'{nm}'!A1"
+    cell.hyperlink = Hyperlink(ref=cell.coordinate, location=f"'{nm}'!A1")
 ws.freeze_panes = "A4"
-ws.sheet_properties.tabColor = "C00000"
 
+# ============================================================================ 12. UNIÓN DE HOJAS (pruebas y tablas)
+import importlib.util as _ilu2
+_sp = _ilu2.spec_from_file_location("msh", __file__.rsplit("/", 1)[0] + "/merge_sheets.py")
+MSH = _ilu2.module_from_spec(_sp)
+_sp.loader.exec_module(MSH)
+T_ = Font(name=FN, size=11, bold=True, color="002060")
+G_ = Font(name=FN, size=8, color="000000")
+INTRO_P = [("PRUEBAS DE AUDITORÍA – OBLIGACIONES FINANCIERAS – corte 31-jul-2026", T_),
+           ("Cómo leer esta hoja:  celdas BLANCAS = datos tomados del cliente, del balance o del banco;   celdas AMARILLAS = cálculo o recálculo hecho por auditoría.", G_),
+           ("'OK' = la cifra cuadra;   'DIFERENCIA' = revisar (explicación en la columna de comentarios o en la hoja Hallazgos).   Cifras en pesos colombianos.", G_),
+           ("Contenido:  BLOQUE 1 Movimiento vs balance  ·  BLOQUE 2 Certificados bancarios  ·  BLOQUE 3 Saldo por obligación  ·  BLOQUE 4 Recálculo de intereses", G_)]
+BLOCKS_P = [
+    ("Cruce_Mov_Balance", "BLOQUE 1 – ¿El auxiliar contable de la cuenta 21 cuadra con el balance?",
+     ["Qué se hizo: se sumaron todos los débitos y créditos del auxiliar (ene–jul 2026) y se compararon con el balance de prueba.",
+      "Cómo se lee: saldo inicial + débitos − créditos = saldo final calculado (amarillo), que se compara con el saldo final del balance.",
+      f'="Resultado: "&Cruce_Mov_Balance!M{CMB_TOT}&"  –  diferencia total en saldos: "&TEXT(Cruce_Mov_Balance!H{CMB_TOT},"#,##0")']),
+    ("Certificados", "BLOQUE 2 – ¿Los saldos del detalle 62 coinciden con lo que dice el banco?",
+     ["Qué se hizo: se tomó cada extracto o certificado bancario y se comparó capital, tasa y vencimiento con el detalle 62 del cliente.",
+      "Capital banco 31-jul (amarillo) = saldo del certificado − abonos a capital pagados después de la fecha del certificado.  Sección C: cada pago del banco vs el comprobante contable.",
+      f'="Resultado: diferencia detalle 62 − banco "&TEXT(Certificados!L{C_TOT},"#,##0")&";  saldo cubierto con certificados: "&TEXT({C_COBERT},"0%")']),
+    ("Saldos_x_Obligacion", "BLOQUE 3 – Saldo de cada obligación: contabilidad vs detalle 62 vs tabla vs banco",
+     ["Qué se hizo: saldo contable de cada crédito/leasing = saldo al 31-dic-25 (papel 2025) + nuevos préstamos − pagos 2026 (amarillo).",
+      "Luego se compara con el detalle 62, con la tabla de amortización del cliente y con el banco ([C] certificado 2026; [E] estimado con el extracto de dic-25).",
+      f'="Resultado: la suma por obligación cuadra con el balance (diferencia "&TEXT(Saldos_x_Obligacion!H{SX_CRED[1]}+Saldos_x_Obligacion!H{SX_LEAS[1]},"#,##0")&"); el detalle 62 está desactualizado en leasing."']),
+    ("Recalculo_Intereses", "BLOQUE 4 – Recálculo de intereses",
+     ["Fórmula: interés = capital × ((1 + tasa EA)^(días / base) − 1), con base 365 o 360 según el banco.",
+      "Parte 1: ¿el banco cobró bien?  ·  Parte 2: intereses desde el último pago hasta el 31-jul que no están contabilizados (AJE-1)  ·  Parte 3: saldo implícito de leasings.",
+      f'="Resultado: intereses no causados al 31-jul = "&TEXT(Recalculo_Intereses!K{P2_TOT},"$#,##0")']),
+]
+INTRO_T = [("REVISIÓN DE LAS TABLAS DE AMORTIZACIÓN DEL CLIENTE (papel 64) – 25 tablas", T_),
+           ("Cómo leer esta hoja: primero el RESUMEN de las 25 tablas; debajo, cada tabla completa (usa los enlaces de la columna 'Anexo' del resumen).", G_),
+           ("En cada tabla: columnas A–G BLANCAS = tabla tal como la entregó el cliente;   columnas H–P AMARILLAS = recálculo de auditoría.", G_),
+           ("Si 'Dif. saldo' = 0 la tabla está bien calculada.   'Tabla − banco' muestra cuánto se aleja la tabla de lo que realmente cobra el banco.", G_)]
+BLOCKS_T = [("Rev_Tablas_Amort", "RESUMEN DE LA REVISIÓN DE TABLAS",
+             ["Cada fila es una tabla. La última columna ('Observación de auditoría') explica en palabras lo encontrado."])]
+for ident in ANX_ORDER:
+    t = TAB[ident]
+    BLOCKS_T.append((ANX[ident]["sh"], f"TABLA {ANX[ident]['n']:02d} – {ident} – {t.get('banco')} {t.get('contrato')}",
+                     ["Observación: " + OBS_T.get(ident, "")]))
+mapP, stP, wsP = MSH.merge(wb, "Pruebas_Auditoria", BLOCKS_P, YELLOW, intro=INTRO_P)
+mapT, stT, wsT = MSH.merge(wb, "Tablas_Amortizacion", BLOCKS_T, YELLOW, intro=INTRO_T)
+MAP = {**mapP, **mapT}
+MSH.rewrite_workbook(wb, MAP, removed=[b[0] for b in BLOCKS_P] + [b[0] for b in BLOCKS_T])
+wsP.freeze_panes = None
+wsT.freeze_panes = None
+TXT_REP = [("Rev_Tablas_Amort / A01–A25", "Tablas_Amortizacion"), ("Rev_Tablas_Amort", "Tablas_Amortizacion (resumen)"),
+           ("anexos A01–A25", "hoja Tablas_Amortizacion"), ("A01–A25", "Tablas_Amortizacion"), ("A01-A25", "Tablas_Amortizacion"),
+           ("Saldos_x_Obligacion", "Pruebas_Auditoria (bloque 3)"), ("Recalculo_Intereses", "Pruebas_Auditoria (bloque 4)"),
+           ("Cruce_Mov_Balance", "Pruebas_Auditoria (bloque 1)"), ("Hoja Certificados", "Pruebas_Auditoria (bloque 2)"),
+           ("Certificados sección", "Pruebas_Auditoria bloque 2, sección")]
 for w in wb.worksheets:
-    w.sheet_properties.tabColor = {"PT_62": "C00000", "Resumen": "1F3864", "Hallazgos": "C00000", "Pendientes": "C00000"}.get(
-        w.title, "A9D08E" if re.match(r"A\d\d-", w.title) else "8EA9DB")
+    for row in w.iter_rows():
+        for c in row:
+            v = c.value
+            if isinstance(v, str) and not v.startswith("="):
+                if v == "Certificados":
+                    c.value = "Pruebas_Auditoria (bloque 2)"
+                    continue
+                for a_, b_ in TXT_REP:
+                    v = v.replace(a_, b_)
+                c.value = v
+            elif isinstance(v, str) and v.startswith("=") and w.title == "PT_62" and '"' in v:
+                for a_, b_ in TXT_REP:
+                    v = v.replace(a_, b_)
+                c.value = v
+ORDER = ["PT_62", "Resumen", "Pruebas_Auditoria", "Tablas_Amortizacion", "Hallazgos", "Pendientes", "Cruce_Detalle_Mayor",
+         "Intereses_x_Obligacion", "Clasif_CP_LP", "Gasto_Intereses", "Detalle_62", "Mayor_Dic25", "Mayor_Mov", "Balance_21", "Int_Glosas"]
+wb._sheets = [wb[n] for n in ORDER] + [w for w in wb.worksheets if w.title not in ORDER]
+wb.active = 0
+for w in wb.worksheets:
+    w.sheet_properties.tabColor = None
     w.page_setup.orientation = "landscape"
     w.sheet_properties.pageSetUpPr.fitToPage = True
     w.page_setup.fitToWidth = 1
