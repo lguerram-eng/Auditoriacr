@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AttachedDocument xmlns="urn:oasis:names:specification:ubl:schema:xsd:AttachedDocument-2"
+ xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+ xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ID>AD-FE-2001</cbc:ID>
+  <cac:Attachment><cac:ExternalReference><cbc:MimeCode>text/xml</cbc:MimeCode>
+    <cbc:Description><![CDATA[<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+ xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+ xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:UBLVersionID>UBL 2.1</cbc:UBLVersionID>
+  <cbc:ID>FE-2001</cbc:ID>
+  <cbc:UUID schemeName="CUFE-SHA384">e30cd5507bb79e012c11db55b002850e47072af9717840fe71e756753ee3a897c0e18a5e946d99c8fceda552d43956b7</cbc:UUID>
+  <cbc:IssueDate>2026-03-05</cbc:IssueDate>
+  <cbc:DueDate>2026-03-25</cbc:DueDate>
+  <cbc:InvoiceTypeCode>01</cbc:InvoiceTypeCode>
+  <cbc:Note>Servicio de transporte de carga</cbc:Note>
+  <cbc:DocumentCurrencyCode>COP</cbc:DocumentCurrencyCode>
+  <cac:OrderReference><cbc:ID>OC-5500</cbc:ID></cac:OrderReference>
+  <cac:AccountingSupplierParty><cac:Party><cac:PartyTaxScheme>
+    <cbc:RegistrationName>Servicios Logísticos del Caribe Ltda.</cbc:RegistrationName>
+    <cbc:CompanyID schemeID="0" schemeName="31">800234567</cbc:CompanyID>
+  </cac:PartyTaxScheme></cac:Party></cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty><cac:Party><cac:PartyTaxScheme>
+    <cbc:RegistrationName>Cliente Demostración S.A.S.</cbc:RegistrationName>
+    <cbc:CompanyID schemeID="0" schemeName="31">900100200</cbc:CompanyID>
+  </cac:PartyTaxScheme></cac:Party></cac:AccountingCustomerParty>
+  <cac:PaymentMeans><cbc:ID>2</cbc:ID></cac:PaymentMeans>
+  <cac:TaxTotal><cbc:TaxAmount currencyID="COP">380000.00</cbc:TaxAmount>
+    <cac:TaxSubtotal><cbc:TaxableAmount currencyID="COP">2000000.00</cbc:TaxableAmount><cbc:TaxAmount currencyID="COP">380000.00</cbc:TaxAmount>
+      <cac:TaxCategory><cbc:Percent>19.00</cbc:Percent><cac:TaxScheme><cbc:ID>01</cbc:ID><cbc:Name>IVA</cbc:Name></cac:TaxScheme></cac:TaxCategory>
+    </cac:TaxSubtotal></cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="COP">2000000.00</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="COP">2000000.00</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="COP">2380000.00</cbc:TaxInclusiveAmount>
+    <cbc:AllowanceTotalAmount currencyID="COP">0.00</cbc:AllowanceTotalAmount>
+    <cbc:PayableAmount currencyID="COP">2380000.00</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine><cbc:ID>1</cbc:ID><cbc:InvoicedQuantity unitCode="EA">2</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="COP">2000000.00</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Description>Servicio de transporte de carga</cbc:Description></cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="COP">1000000.00</cbc:PriceAmount></cac:Price></cac:InvoiceLine>
+</Invoice>]]></cbc:Description>
+  </cac:ExternalReference></cac:Attachment>
+</AttachedDocument>
