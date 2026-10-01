@@ -276,7 +276,7 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
     missing = [c for c in REQUIRED_COLUMNS if c not in mapping]
     if missing:
         errors.append(f"Columnas obligatorias faltantes en {ref_sheet}: {', '.join(missing)}")
-        return _report(wb, found, errors, warnings, info, row_issues, normalized, mapping=mapping), normalized
+        return _report(wb, {ref_sheet: True} if simple else found, errors, warnings, info, row_issues, normalized, mapping=mapping), normalized
 
     def issue(row, col, msg, level="ADVERTENCIA"):
         row_issues.append({"fila": row, "columna": col, "nivel": level, "detalle": msg})
@@ -434,7 +434,8 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
                 warnings.append(f"RESULTADO_ESPERADO fila {rownum}: ID_MUESTRA {sid} no existe en REFERENCIA_VOUCHING")
             normalized["expected"].append({"sample_id": sid, "expected_status": st_norm, "expected_file": _s(r.get("ARCHIVO")), "note": _s(r.get("OBSERVACION"))})
 
-    return _report(wb, found, errors, warnings, info, row_issues, normalized, mapping=mapping, recon=recon, total=total), normalized
+    sheets_view = {ref_sheet: True} if simple else found
+    return _report(wb, sheets_view, errors, warnings, info, row_issues, normalized, mapping=mapping, recon=recon, total=total), normalized
 
 
 def _report(wb, found, errors, warnings, info, row_issues, normalized, mapping=None, recon=None, total=Decimal(0)) -> dict:

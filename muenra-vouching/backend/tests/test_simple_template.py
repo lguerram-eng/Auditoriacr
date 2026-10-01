@@ -32,6 +32,7 @@ def test_simple_template_with_title_rows_imports():
     report, norm = validate(build_simple_template())
     assert report["estado"] == "CON_ADVERTENCIAS" and not report["errores"]
     assert any("CARGA" in i for i in report["informacion"])
+    assert report["hojas_reconocidas"] == {"CARGA": True}
     assert report["columnas_mapeadas"]["VALOR_ESPERADO"] == "VALOR_TOTAL"
     assert report["columnas_mapeadas"]["NIT"] == "NIT_IDENTIFICACION"
     assert report["columnas_mapeadas"]["FECHA"] == "FECHA_DOCUMENTO"
