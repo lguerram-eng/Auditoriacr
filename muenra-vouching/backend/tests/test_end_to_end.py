@@ -54,7 +54,7 @@ def test_explanations_and_evidence(client, admin_headers, processed_project):
     keys = {c["clave"] for c in principal["criterios"]}
     assert {"nit", "numero", "valor", "fecha", "nombre", "contrato", "orden_compra", "concepto", "moneda", "tipo"} <= keys
     valor = next(c for c in principal["criterios"] if c["clave"] == "valor")
-    assert valor["pagina"] == 1 and "1.000.000" in valor["evidencia"]
+    assert valor["pagina"] == 1 and "1.000.000" in valor["evidencia"] and valor["esperado"] == "1.000.000"
     assert detail["valor_extraido"] == 1000000.0 and detail["diferencia_absoluta"] == 0.0
     # XML + representación gráfica relacionados con la misma partida sin duplicar valor
     m002 = next(r for r in results if r["id_muestra"] == "M002")
@@ -63,6 +63,9 @@ def test_explanations_and_evidence(client, admin_headers, processed_project):
     # Soportes complementarios (contrato DOCX y OC) para el egreso
     m015 = next(r for r in results if r["id_muestra"] == "M015")
     assert sum(1 for d in m015["documentos"] if d["rol"] == "COMPLEMENTARIO") == 2
+    # Un soporte principal de otra partida no se presenta como complementario
+    m006 = next(r for r in results if r["id_muestra"] == "M006")
+    assert [d["rol"] for d in m006["documentos"]] == ["PRINCIPAL"]
 
 
 @requires_ocr

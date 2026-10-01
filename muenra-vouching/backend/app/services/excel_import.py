@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from .extraction.classifier import normalize_type
 from .extraction.fields import fold
-from .normalization import normalize_doc_number, parse_amount, parse_date, parse_nit
+from .normalization import format_cop, normalize_doc_number, parse_amount, parse_date, parse_nit
 from .settings_defaults import DEFAULT_PARAMETERS, merged_parameters, validate_parameters
 
 SHEETS = ["CONFIGURACION", "REFERENCIA_VOUCHING", "ENTIDADES_ALIAS", "TIPOS_DOCUMENTO", "CAMPOS_EXTRACCION", "RESULTADO_ESPERADO"]
@@ -199,16 +199,17 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
     """Valida el libro y devuelve (informe de integridad, datos normalizados)."""
     errors: list[str] = []
     warnings: list[str] = []
+    info: list[str] = []
     row_issues: list[dict] = []
     normalized: dict = {"references": [], "aliases": [], "types": [], "fields": [], "expected": [], "params": {}, "project": {}}
 
     found = {s: s in wb.sheets for s in SHEETS}
     if not found["REFERENCIA_VOUCHING"]:
         errors.append("No existe la hoja obligatoria REFERENCIA_VOUCHING")
-        return _report(wb, found, errors, warnings, row_issues, normalized), normalized
+        return _report(wb, found, errors, warnings, info, row_issues, normalized), normalized
     for s, ok in found.items():
         if not ok and s != "REFERENCIA_VOUCHING":
-            warnings.append(f"Hoja {s} no encontrada: se usarán valores predeterminados")
+            info.append(f"Hoja {s} no encontrada: se usarán valores predeterminados")
 
     if found["CONFIGURACION"]:
         params, proj, w = parse_configuration(wb.sheets["CONFIGURACION"])
@@ -222,7 +223,7 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
     missing = [c for c in REQUIRED_COLUMNS if c not in mapping]
     if missing:
         errors.append(f"Columnas obligatorias faltantes en REFERENCIA_VOUCHING: {', '.join(missing)}")
-        return _report(wb, found, errors, warnings, row_issues, normalized, mapping=mapping), normalized
+        return _report(wb, found, errors, warnings, info, row_issues, normalized, mapping=mapping), normalized
 
     def issue(row, col, msg, level="ADVERTENCIA"):
         row_issues.append({"fila": row, "columna": col, "nivel": level, "detalle": msg})
@@ -302,7 +303,7 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
         recon["control_total_valor"] = str(ctrl_v)
         recon["valor_cuadra"] = ctrl_v is not None and abs(ctrl_v - total) <= Decimal("0.01")
         if not recon["valor_cuadra"]:
-            errors.append(f"La suma de VALOR_ESPERADO ({total:,.2f}) no concilia con CONTROL_TOTAL_VALOR ({ctrl_v:,.2f})" if ctrl_v is not None else "CONTROL_TOTAL_VALOR no es numérico")
+            errors.append(f"La suma de VALOR_ESPERADO ({format_cop(total)}) no concilia con CONTROL_TOTAL_VALOR ({format_cop(ctrl_v)})" if ctrl_v is not None else "CONTROL_TOTAL_VALOR no es numérico")
 
     # Hojas auxiliares
     if found["ENTIDADES_ALIAS"]:
@@ -353,10 +354,10 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
                 warnings.append(f"RESULTADO_ESPERADO fila {rownum}: ID_MUESTRA {sid} no existe en REFERENCIA_VOUCHING")
             normalized["expected"].append({"sample_id": sid, "expected_status": st_norm, "expected_file": _s(r.get("ARCHIVO")), "note": _s(r.get("OBSERVACION"))})
 
-    return _report(wb, found, errors, warnings, row_issues, normalized, mapping=mapping, recon=recon, total=total), normalized
+    return _report(wb, found, errors, warnings, info, row_issues, normalized, mapping=mapping, recon=recon, total=total), normalized
 
 
-def _report(wb, found, errors, warnings, row_issues, normalized, mapping=None, recon=None, total=Decimal(0)) -> dict:
+def _report(wb, found, errors, warnings, info, row_issues, normalized, mapping=None, recon=None, total=Decimal(0)) -> dict:
     status = "RECHAZADA" if errors else ("CON_ADVERTENCIAS" if warnings or row_issues else "VALIDA")
     return {
         "aplicativo": "Muenra Vouching",
@@ -367,6 +368,7 @@ def _report(wb, found, errors, warnings, row_issues, normalized, mapping=None, r
         "columnas_mapeadas": mapping or {},
         "errores": errors,
         "advertencias": warnings,
+        "informacion": info,
         "incidencias_por_fila": row_issues[:2000],
         "total_incidencias": len(row_issues),
         "conciliacion": recon or {},

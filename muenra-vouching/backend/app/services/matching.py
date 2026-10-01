@@ -43,6 +43,7 @@ from .normalization import (
     parse_date,
     parse_nit,
 )
+from .normalization import format_cop as cop
 from .settings_defaults import CRITERION_LABELS, PRIORITY_LABELS, merged_parameters
 
 ENGINE_VERSION = "vouching-1.0"
@@ -249,7 +250,7 @@ def _fmt(v) -> str | None:
     if v is None:
         return None
     if isinstance(v, Decimal):
-        return f"{v:,.2f}"
+        return cop(v)
     return str(v)
 
 
@@ -600,6 +601,9 @@ def run_matching(db: Session, project_id: int, user: models.User | None = None) 
                 "CONTRATO", "OTROSI", "ORDEN_COMPRA", "CERTIFICACION", "COMPROBANTE_EGRESO", "SOPORTE_PAGO", "RECIBO_CAJA")
             if not (references_row or related_type) or ps.score < thr * 0.8:
                 continue
+            if unit_rows[ps.unit.key] and not references_row:
+                continue  # es soporte principal de otra partida y no referencia a esta
+                continue
             if ps.unit.rep.family in fams and unit_rows[ps.unit.key]:
                 continue  # otra factura ya usada por otra partida no es complemento
             if any(c.unit.key == ps.unit.key for c in o.complements):
@@ -704,13 +708,13 @@ def _decide(o: RowOutcome, params: dict, unit_rows, ref_by_id, ref_duplicated: b
     if len(o.primaries) > 1:
         total = sum((ps.unit.rep.value or Decimal(0)) for ps, _ in o.primaries)
         cmp = compare_values(expected, total, tol, params["POLITICA_VALOR_CERO"])
-        reasons.append(f"Valor soportado con {len(o.primaries)} documentos cuya suma es {total:,.2f}")
+        reasons.append(f"Valor soportado con {len(o.primaries)} documentos cuya suma es {cop(total)}")
     elif len(shared_rows) > 1:
         group_expected = sum((parse_amount(ref_by_id[x].expected_value) or Decimal(0)) for x in shared_rows)
         cmp = compare_values(group_expected, main.unit.rep.value, tol, params["POLITICA_VALOR_CERO"])
         others = [ref_by_id[x].sample_id for x in shared_rows if x != r.id]
         o.shared_with = [x for x in shared_rows if x != r.id]
-        reasons.append(f"Documento compartido con las partidas {', '.join(others)}; se compara la suma de las partidas ({group_expected:,.2f}) con el documento")
+        reasons.append(f"Documento compartido con las partidas {', '.join(others)}; se compara la suma de las partidas ({cop(group_expected)}) con el documento")
     else:
         cmp = compare_values(expected, main.unit.rep.value, tol, params["POLITICA_VALOR_CERO"])
     o.value_cmp = cmp

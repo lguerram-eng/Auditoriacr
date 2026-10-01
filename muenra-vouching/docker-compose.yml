@@ -1,0 +1,78 @@
+# Muenra Vouching — despliegue local con Docker Compose
+#   docker compose up -d --build                       (aplicación)
+#   docker compose --profile antivirus up -d --build   (incluye ClamAV)
+#   docker compose exec api python -m app.seed         (datos ficticios de demostración)
+name: muenra-vouching
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-muenra}
+      POSTGRES_USER: ${POSTGRES_USER:-muenra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-muenra} -d ${POSTGRES_DB:-muenra}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [interna]
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MUENRA_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-muenra}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-muenra}
+      MUENRA_STORAGE_DIR: /data/storage
+      MUENRA_INLINE_WORKER: "false"
+    volumes:
+      - documentos:/data/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [interna]
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    command: ["python", "-m", "app.worker"]
+    environment:
+      MUENRA_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-muenra}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-muenra}
+      MUENRA_STORAGE_DIR: /data/storage
+    volumes:
+      - documentos:/data/storage
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+    healthcheck:
+      disable: true
+    networks: [interna]
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    depends_on:
+      - api
+    networks: [interna]
+
+  clamav:
+    image: clamav/clamav:stable
+    profiles: ["antivirus"]
+    restart: unless-stopped
+    networks: [interna]
+
+volumes:
+  pgdata:
+  documentos:
+
+networks:
+  interna:

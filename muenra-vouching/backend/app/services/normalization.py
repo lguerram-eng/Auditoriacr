@@ -269,6 +269,17 @@ def parse_amount(raw) -> Decimal | None:
     return -val if negative else val
 
 
+def format_cop(v) -> str:
+    """Formato colombiano: 1.234.567,89 (sin decimales si son cero)."""
+    d = Decimal(str(v)).quantize(Decimal("0.01"))
+    txt = f"{d:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return txt[:-3] if txt.endswith(",00") else txt
+
+
+def format_pct(x: float) -> str:
+    return f"{x * 100:.2f}".replace(".", ",") + " %"
+
+
 @dataclass(frozen=True)
 class ValueComparison:
     expected: Decimal | None
@@ -306,9 +317,9 @@ def compare_values(expected, extracted, tolerance: float = 0.10, zero_policy: st
     if diff == 0:
         res, detail = "EXACTO", "Valores idénticos"
     elif pct <= tolerance + 1e-12:
-        res, detail = "DENTRO_TOLERANCIA", f"Diferencia {pct:.2%} dentro de la tolerancia {tolerance:.2%}"
+        res, detail = "DENTRO_TOLERANCIA", f"Diferencia {format_pct(pct)} dentro de la tolerancia {format_pct(tolerance)}"
     else:
-        res, detail = "FUERA_TOLERANCIA", f"Diferencia {pct:.2%} supera la tolerancia {tolerance:.2%}"
+        res, detail = "FUERA_TOLERANCIA", f"Diferencia {format_pct(pct)} supera la tolerancia {format_pct(tolerance)}"
     return ValueComparison(e, x, diff, round(pct, 6), tolerance, res, detail)
 
 
@@ -334,7 +345,7 @@ MONTHS = {
 DATE_PATTERNS = [
     re.compile(r"\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b"),  # ISO
     re.compile(r"\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b"),  # dd/mm/aaaa
-    re.compile(r"\b(\d{1,2})\s*(?:DE\s+)?([A-Z]{3,10})\.?\s*(?:DE(?:L)?\s+|[-/ ])?\s*(\d{4})\b"),  # 15 de marzo de 2026
+    re.compile(r"\b(\d{1,2})\s*[-/]?\s*(?:DE\s+)?([A-Z]{3,10})\.?\s*(?:DE(?:L)?\s+|[-/ ])?\s*(\d{4})\b"),  # 15 de marzo de 2026
     re.compile(r"\b([A-Z]{3,10})\.?\s+(\d{1,2})\s*(?:DE|,)?\s*(\d{4})\b"),  # marzo 15 de 2026
 ]
 

@@ -8,7 +8,7 @@ from pathlib import Path
 _TMP = Path(tempfile.mkdtemp(prefix="muenra_test_"))
 os.environ.update({
     "MUENRA_ENV": "test",
-    "MUENRA_DATABASE_URL": f"sqlite:///{_TMP / 'test.db'}",
+    "MUENRA_DATABASE_URL": os.environ.get("MUENRA_TEST_DATABASE_URL", f"sqlite:///{_TMP / 'test.db'}"),
     "MUENRA_STORAGE_DIR": str(_TMP / "storage"),
     "MUENRA_INLINE_WORKER": "false",
     "MUENRA_BOOTSTRAP_ADMIN_EMAIL": "admin@muenra.test",
