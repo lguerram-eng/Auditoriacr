@@ -514,7 +514,7 @@ CERTS = [
     (13, "Davivienda", "7000457300569032", "DAV-569032", "Extracto crédito corporativo", dt.date(2026, 1, 28),
      2999995943.80, "=206288000-206287213.20", 0.1258, dt.date(2041, 7, 28),
      "Pago 28-jul-26 de $206.288.000 vs intereses facturados $206.287.213,20: excedente $786,80 se aplica a capital."),
-    (14, "Davivienda Leasing", "000030001021275-3", "DAV-L1021275", "Factura leasing", dt.date(2026, 7, 6),
+    ("p.14 + LEASING_1275-3_DAVIVIENDA.pdf", "Davivienda Leasing", "000030001021275-3", "DAV-L1021275", "Factura leasing", dt.date(2026, 7, 6),
      None, 0, 0.1441, None,
      "Canon 006 (23-jul-26) sólo intereses $64.041.851; 16 cuotas pactadas. El extracto NO informa saldo de capital → ver saldo implícito en Recalculo_Intereses."),
     (16, "Banco de Bogotá Leasing", "00557285005", "BOG-L557285005", "Estado de cuenta leasing", dt.date(2026, 7, 12),
@@ -535,16 +535,16 @@ CERTS = [
     (21, "Banco de Bogotá Leasing", "00556449288", "BOG-L556449288", "Estado de cuenta leasing", dt.date(2026, 7, 10),
      417736780.24, 21542838.16, 0.1422, dt.date(2030, 1, 20),
      "Saldo tras pago 20-abr-26; canon 20-jul-26 capital $21.542.838,16 / costo financiero $14.121.779,84. DTF."),
-    (22, "Davivienda Leasing", "000030001019441-2", "DAV-L1019441", "Factura leasing", dt.date(2026, 6, 25),
+    ("p.22 + LEASING_9441-2_DAVIVIENDA.pdf", "Davivienda Leasing", "000030001019441-2", "DAV-L1019441", "Factura leasing", dt.date(2026, 6, 25),
      None, 0, 0.1603, None,
      "Canon 033 (13-jul-26): capital $12.327.298, intereses $5.062.372, seguro $1.263.646. Último pago 11-jun-26 canon 032 $1.029.562 (sólo intereses). Sin saldo de capital."),
-    (24, "Davivienda Leasing", "000030001019448-3", "DAV-L1019448", "Factura leasing", dt.date(2026, 6, 18),
+    ("p.24 + LEASING_9448-3_DAVIVIENDA.pdf", "Davivienda Leasing", "000030001019448-3", "DAV-L1019448", "Factura leasing", dt.date(2026, 6, 18),
      None, 0, 0.1593, None,
      "Canon 031 (6-jul-26): capital $8.867.342, intereses $4.177.893. Último pago 5-jun-26 canon 030: capital $8.901.235, intereses $4.402.982. Sin saldo de capital."),
 ]
 ws = ws_new("Certificados", "Cruce detalle 62 vs certificados / extractos bancarios (PDF adjunto)",
             "Fuente: ilovepdf_merged_1.pdf (25 págs.). Las págs. 3, 5, 7, 9, 11, 15, 23 y 25 son anexos/instructivos sin cifras. Capital banco 31-jul = capital certificado − abonos a capital entre corte y 31-jul.",
-            [5, 6, 20, 24, 16, 22, 11, 17, 16, 17, 17, 16, 10, 10, 10, 11, 11, 11, 70])
+            [5, 20, 20, 24, 16, 22, 11, 17, 16, 17, 17, 16, 10, 10, 10, 11, 11, 11, 70])
 CH = 4
 header(ws, CH, ["#", "Pág. PDF", "Banco", "Obligación (certificado)", "ID auditoría", "Tipo documento", "Fecha corte",
                 "Capital s/certificado", "Abonos capital posteriores al corte (≤31-jul)", "Capital banco 31-jul-26",
@@ -555,7 +555,7 @@ C_FIRST = r
 CERT_ROW = {}
 for n, (pg, bk, ob, ident, td, fc, cap, abono, ea, venc, obs) in enumerate(CERTS, start=1):
     put(ws, r, 1, n)
-    put(ws, r, 2, pg, font=f_in)
+    put(ws, r, 2, pg, font=f_in, wrap=True)
     put(ws, r, 3, bk, font=f_in)
     put(ws, r, 4, ob, font=f_in)
     put(ws, r, 5, ident, font=f_bold)
@@ -697,6 +697,43 @@ for c in (8, 9, 10):
     L = get_column_letter(c)
     put(ws, r, c, f"=SUM({L}{P_FIRST}:{L}{r - 1})", fmt=NUM, bold=True, fill=fill_tot)
 C_PAGOS_TOT = r
+r += 2
+section(ws, r, "D. Documentos Davivienda Leasing recibidos por separado (LEASING_1275-3 / 9441-2 / 9448-3_DAVIVIENDA.pdf)", 19)
+r += 1
+header(ws, r, ["", "Archivo", "Contrato", "ID auditoría", "Fecha corte", "Canon / fecha", "Capital canon", "Intereses canon",
+               "Seguro", "Tasa EA cobrada", "Último pago (fecha)", "Último pago (valor)", "¿Informa saldo capital?",
+               "Coincide intereses con papel", "Coincide capital con papel", "Coincide tasa con papel", "", "", "Conclusión"], height=40)
+r += 1
+DOCS_ROWS = []
+CERT_WS = ws
+DOCS_DAV = [
+    ("LEASING_1275-3_DAVIVIENDA.pdf", "000030001021275-3", "DAV-L1021275", dt.date(2026, 7, 6), "006 / 2026-07-23", 0, 64041851, 0, 0.1441,
+     dt.date(2026, 4, 23), 55427870),
+    ("LEASING_9441-2_DAVIVIENDA.pdf", "000030001019441-2", "DAV-L1019441", dt.date(2026, 6, 25), "033 / 2026-07-13", 12327298, 5062372, 1263646, 0.1603,
+     dt.date(2026, 6, 11), 1029562),
+    ("LEASING_9448-3_DAVIVIENDA.pdf", "000030001019448-3", "DAV-L1019448", dt.date(2026, 6, 18), "031 / 2026-07-06", 8867342, 4177893, 1263646, 0.1593,
+     dt.date(2026, 6, 5), 14567863),
+]
+for arch, con, ident, fc, can, capc, intc, seg, ea, fup, vup in DOCS_DAV:
+    DOCS_ROWS.append((r, ident))
+    put(ws, r, 2, arch, font=f_in, wrap=True)
+    put(ws, r, 3, con, font=f_in)
+    put(ws, r, 4, ident, font=f_bold)
+    put(ws, r, 5, fc, font=f_in, fmt=DATE)
+    put(ws, r, 6, can, font=f_in)
+    put(ws, r, 7, capc, font=f_in, fmt=NUM)
+    put(ws, r, 8, intc, font=f_in, fmt=NUM)
+    put(ws, r, 9, seg, font=f_in, fmt=NUM)
+    put(ws, r, 10, ea, font=f_in, fmt=PCT)
+    put(ws, r, 11, fup, font=f_in, fmt=DATE)
+    put(ws, r, 12, vup, font=f_in, fmt=NUM)
+    put(ws, r, 13, "NO", font=f_in, bold=True, fill=fill_bad)
+    put(ws, r, 16, f'=IF(J{r}=M{CERT_ROW[ident]},"Sí","NO")')
+    put(ws, r, 19, "Mismo documento que el PDF consolidado. Sólo factura del canon: el saldo de capital sigue sin certificar (PEND-1)."
+        + (" Reconfirma canon 032 pagado sólo con intereses $1.029.562 (PEND-7)." if ident == "DAV-L1019441" else ""),
+        font=f_in, wrap=True)
+    ws.row_dimensions[r].height = 36
+    r += 1
 ws.freeze_panes = "F5"
 
 # ============================================================================ 6. CRUCE DETALLE VS MAYOR
@@ -962,7 +999,9 @@ P3 = [
     ("DAV-L1019441", "Canon 033", 5062372, 0.1603, dt.date(2026, 6, 11), dt.date(2026, 7, 13), 12327298),
     ("DAV-L1019448", "Canon 031", 4177893, 0.1593, dt.date(2026, 6, 5), dt.date(2026, 7, 6), 8867342),
 ]
+P3_ROW = {}
 for ident, can, it, ea, d0, d1, capc in P3:
+    P3_ROW[ident] = r
     put(ws, r, 1, ident, font=f_bold)
     put(ws, r, 2, can, font=f_in)
     put(ws, r, 3, it, font=f_in, fmt=NUM)
@@ -982,6 +1021,10 @@ for c in (10, 11, 12):
     L = get_column_letter(c)
     put(ws, r, c, f"=SUM({L}{P3_FIRST}:{L}{r - 1})", fmt=NUM, bold=True, fill=fill_tot)
 P3_TOT = r
+for rr_, ident in DOCS_ROWS:  # comparación diferida en Certificados sección D
+    p3 = P3_ROW[ident]
+    put(CERT_WS, rr_, 14, f'=IF(H{rr_}=Recalculo_Intereses!C{p3},"Sí","NO")')
+    put(CERT_WS, rr_, 15, f'=IF(G{rr_}=Recalculo_Intereses!I{p3},"Sí","NO")')
 ws.freeze_panes = "C6"
 
 # ============================================================================ 8. GASTO DE INTERESES (prueba analítica)
@@ -1157,7 +1200,8 @@ header(ws, 4, ["Ref.", "Pendiente / información requerida", "Obligación (ID)",
 PEND = [
     ("PEND-1", "Certificados de saldo de capital al 31-jul-26 de los leasings Davivienda 1019441-2, 1019448-3 y 1021275-3 (los extractos sólo traen la factura del canon).",
      "DAV-L1019441 / L1019448 / L1021275", f"=Recalculo_Intereses!K{P3_TOT}", "2, 3, 13", "Davivienda Leasing",
-     "Se usa el saldo del detalle 62; saldo implícito estimado en Recalculo_Intereses Parte 3."),
+     "Se usa el saldo del detalle 62; saldo implícito estimado en Recalculo_Intereses Parte 3. Recibidos LEASING_1275-3/9441-2/9448-3_DAVIVIENDA.pdf: son facturas de canon sin saldo de capital (Certificados sección D).",
+     "Parcial – recibido sin saldo"),
     ("PEND-2", "Certificados de saldo de los leasings Bancolombia 362095, 336817, 331330 y contrato + tabla de amortización del nuevo leasing 386735.",
      "BCL-L362095 / L336817 / L331330 / L386735", f"={cdm}!F16", "1, 2, 3, 13", "Bancolombia",
      "Residual de leasing sin explicar queda abierto; 386735 se toma del mayor (NB-1014)."),
@@ -1174,7 +1218,8 @@ PEND = [
      "DAV-607691 / DAV-569032", f"=Recalculo_Intereses!K{P1_FIRST + 1}+Recalculo_Intereses!K{P1_FIRST + 2}", "6", "Davivienda",
      "Se acepta lo facturado (coincide con lo contabilizado); diferencia de tasa queda abierta."),
     ("PEND-7", "Estado de cuenta del leasing Davivienda 1019441: aplicación del pago del canon 032 (banco: sólo intereses $1.029.562; contabilidad: capital $11.973.677).",
-     "DAV-L1019441", 11973677, "11", "Davivienda Leasing / cliente", "Sin ajuste hasta verificar."),
+     "DAV-L1019441", 11973677, "11", "Cliente", "Sin ajuste hasta verificar. LEASING_9441-2_DAVIVIENDA.pdf reconfirma el lado del banco; falta la explicación del cliente del registro CL-416.",
+     "Parcial – banco reconfirma"),
     ("PEND-8", "Tablas de amortización por obligación para determinar la porción corriente a 12 meses (NIC 1.69).",
      "Todas", "=Clasif_CP_LP!B11+Clasif_CP_LP!B12", "8", "Cliente", "AJE-2 calculado con el CP del detalle 62 corregido; sujeto a validación."),
     ("PEND-9", "Materialidad del encargo (global, de ejecución y umbral de errores triviales).",
@@ -1187,24 +1232,25 @@ PEND = [
 ]
 r = 5
 PN_FIRST = r
-for ref, txt, ident, monto, hz, quien, trat in PEND:
+for ref, txt, ident, monto, hz, quien, trat, *est in PEND:
+    est = est[0] if est else "Pendiente"
     put(ws, r, 1, ref, bold=True)
     put(ws, r, 2, txt, wrap=True)
     put(ws, r, 3, ident, wrap=True)
     put(ws, r, 4, monto if monto is not None else "Cualitativo", fmt=NUM, font=f_in if isinstance(monto, (int, float)) else None)
     put(ws, r, 5, hz)
     put(ws, r, 6, quien, wrap=True)
-    put(ws, r, 7, "Pendiente", bold=True, fill=fill_bad)
+    put(ws, r, 7, est, bold=True, fill=fill_bad, wrap=True)
     put(ws, r, 8, trat, wrap=True)
     ws.row_dimensions[r].height = 52
     r += 1
 PN_LAST = r - 1
 r += 1
 put(ws, r, 2, "Pendientes abiertos", bold=True, fill=fill_tot)
-put(ws, r, 4, f'=COUNTIF(G{PN_FIRST}:G{PN_LAST},"Pendiente")', fmt=NUM0, bold=True, fill=fill_tot)
+put(ws, r, 4, f'=COUNTIF(G{PN_FIRST}:G{PN_LAST},"<>Recibido")', fmt=NUM0, bold=True, fill=fill_tot)
 PN_COUNT = f"Pendientes!$D${r}"
 r += 1
-put(ws, r, 2, "Instrucción: al recibir un soporte, cambiar el Estado a 'Recibido', actualizar los datos de entrada (azul) en la hoja correspondiente y recalcular.",
+put(ws, r, 2, "Instrucción: al recibir un soporte suficiente, cambiar el Estado a 'Recibido' (se descuenta del contador), actualizar los datos de entrada (azul) en la hoja correspondiente y recalcular.",
     font=f_sub, border=False)
 ws.freeze_panes = "B5"
 
