@@ -5,7 +5,9 @@ documentos reales ni datos personales.
 
 Uso:  python -m demo.generate_demo [directorio_salida]
 Produce:
-  <salida>/referencia_vouching_demo.xlsx   (6 hojas)
+  <salida>/referencia_vouching_demo.xlsx   (plantilla completa, 6 hojas)
+  <salida>/plantilla_simple_demo.xlsx      (plantilla simple: hoja CARGA con las mismas partidas)
+  <salida>/Plantilla_Simple_Muenra_Vouching.xlsx (plantilla simple vacía con 3 filas de ejemplo)
   <salida>/documentos/*.pdf|xml|png|tiff|jpg|docx
 """
 from __future__ import annotations
@@ -457,6 +459,12 @@ def generate(out_dir: Path) -> Path:
     docs_dir.mkdir(exist_ok=True)
     rows, docs, expected = scenario()
     (out_dir / "referencia_vouching_demo.xlsx").write_bytes(build_reference_workbook(rows, expected))
+    from app.services.template import build_simple_template
+
+    simple = [[sid, tipo, num, fecha, tercero, nit_, concepto, None, None, None, valor, moneda, contrato or oc, archivo, 0.10, None]
+              for sid, tipo, num, fecha, tercero, nit_, valor, moneda, contrato, oc, concepto, _cc, _cta, archivo in rows]
+    (out_dir / "plantilla_simple_demo.xlsx").write_bytes(build_simple_template(simple, examples=False))
+    (out_dir / "Plantilla_Simple_Muenra_Vouching.xlsx").write_bytes(build_simple_template())
     for name, data in docs.items():
         (docs_dir / name).write_bytes(data)
     return out_dir

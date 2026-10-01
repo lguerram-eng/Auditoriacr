@@ -254,6 +254,22 @@ def _fmt(v) -> str | None:
     return str(v)
 
 
+def row_tolerance(ref: models.ReferenceItem, params: dict) -> float:
+    """Tolerancia de valor de la partida: columna TOLERANCIA_VALOR del Excel o la del proyecto."""
+    t = (ref.extra or {}).get("TOLERANCIA_VALOR")
+    try:
+        t = float(t)
+        if 0 <= t <= 1:
+            return t
+    except (TypeError, ValueError):
+        pass
+    return float(params["TOLERANCIA_VALOR"])
+
+
+# Valores complementarios de la plantilla simple: columna del Excel -> campo extraído
+COMPONENTS = {"subtotal": ("SUBTOTAL", "subtotal"), "iva": ("IVA", "iva"), "retenciones": ("RETENCIONES", "retenciones")}
+
+
 def value_score(cmp, tol: float) -> float | None:
     if cmp.result == "NO_DISPONIBLE":
         return None
@@ -280,7 +296,7 @@ class Scorer:
 
     def score(self, ref: models.ReferenceItem, unit: Unit) -> PairScore:
         d = unit.rep
-        p, tol = self.p, float(self.p["TOLERANCIA_VALOR"])
+        p, tol = self.p, row_tolerance(ref, self.p)
         crit: dict[str, Criterion] = {}
         contradiction = False
 
@@ -382,6 +398,15 @@ class Scorer:
         else:
             crit["moneda"] = Criterion("moneda", None, ref.currency, dm, "No disponible")
 
+        # Subtotal, IVA y retenciones (plantilla simple): referencia complementaria
+        for key, (col, fname) in COMPONENTS.items():
+            exp_v = (ref.extra or {}).get(col)
+            got = d.f(fname)
+            if exp_v in (None, "") or got in (None, ""):
+                continue
+            cv = compare_values(exp_v, got, tol, "EXACTA")
+            crit[key] = Criterion(key, value_score(cv, tol), _fmt(cv.expected), _fmt(cv.extracted), cv.detail, evidence=d.fields.get(fname))
+
         # Ponderación
         num = den = 0.0
         for k, c in crit.items():
@@ -444,7 +469,6 @@ class RowOutcome:
 def run_matching(db: Session, project_id: int, user: models.User | None = None) -> models.MatchRun:
     project = db.get(models.Project, project_id)
     params = merged_parameters(project.settings)
-    tol = float(params["TOLERANCIA_VALOR"])
     thr = float(params["UMBRAL_RELACION"])
 
     refs = db.query(models.ReferenceItem).filter_by(project_id=project_id).order_by(models.ReferenceItem.row_number).all()
@@ -531,7 +555,7 @@ def run_matching(db: Session, project_id: int, user: models.User | None = None) 
                 continue
             group_expected = sum((parse_amount(ref_by_id[x].expected_value) or Decimal(0)) for x in unit_rows[ps.unit.key])
             mine = parse_amount(r.expected_value) or Decimal(0)
-            if group_expected + mine <= doc_val * Decimal(str(1 + tol)):
+            if group_expected + mine <= doc_val * Decimal(str(1 + row_tolerance(r, params))):
                 o.primaries.append((ps, None))
                 unit_rows[ps.unit.key].append(r.id)
                 break
@@ -545,6 +569,7 @@ def run_matching(db: Session, project_id: int, user: models.User | None = None) 
             continue
         current = [ps for ps, _ in o.primaries]
         if current:
+            tol = row_tolerance(r, params)
             cmp_cur = compare_values(expected, current[0].unit.rep.value, tol)
             if cmp_cur.result != "FUERA_TOLERANCIA" or (current[0].unit.rep.value or 0) >= expected or len(unit_rows[current[0].unit.key]) > 1:
                 continue
@@ -554,6 +579,7 @@ def run_matching(db: Session, project_id: int, user: models.User | None = None) 
             and ((ps.criteria["nit"].score or 0) >= 1 or (ps.criteria["nombre"].score or 0) * 100 >= float(params["UMBRAL_NOMBRE"])
                  or (ps.criteria["contrato"].score or 0) >= 0.9 or (ps.criteria["orden_compra"].score or 0) >= 0.9)
         ][:12]
+        tol = row_tolerance(r, params)
         best_combo, best_diff = None, None
         base_val = sum((ps.unit.rep.value or 0) for ps in current)
         for k in range(1 if current else 2, max_k - len(current) + 1):
@@ -653,7 +679,7 @@ def run_matching(db: Session, project_id: int, user: models.User | None = None) 
                 linked_docs.setdefault(d.id, o.status)
         if o.special_doc:
             linked_docs.setdefault(o.special_doc.id, o.status)
-        _save_result(db, project_id, run.id, o, tol)
+        _save_result(db, project_id, run.id, o, row_tolerance(r, params))
 
     dup_docs = {d.id for u in units if u.duplicate_flag for d in u.docs}
     for doc in docs:
@@ -681,7 +707,7 @@ def run_matching(db: Session, project_id: int, user: models.User | None = None) 
 
 def _decide(o: RowOutcome, params: dict, unit_rows, ref_by_id, ref_duplicated: bool) -> None:
     r = o.ref
-    tol = float(params["TOLERANCIA_VALOR"])
+    tol = row_tolerance(r, params)
     reasons: list[str] = []
     if ref_duplicated:
         reasons.append("Partida duplicada en la población (mismo NIT, número y valor)")
@@ -733,6 +759,9 @@ def _decide(o: RowOutcome, params: dict, unit_rows, ref_by_id, ref_duplicated: b
         if c["nit"].score == 1.0 and "DV: NO COINCIDE" in c["nit"].detail:
             flags.add(Status.REVISION_MANUAL)
             reasons.append("El NIT base coincide pero el dígito de verificación es diferente")
+        for key in COMPONENTS:
+            if key in c and c[key].score is not None and c[key].score < 0.7:
+                reasons.append(f"{CRITERION_LABELS[key]} (referencia): esperado {c[key].expected}, documento {c[key].found}")
         if c["moneda"].score == 0:
             flags.add(Status.EXCEPCION)
             reasons.append(f"Moneda diferente: esperada {c['moneda'].expected}, documento {c['moneda'].found}")

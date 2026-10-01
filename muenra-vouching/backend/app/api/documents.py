@@ -77,6 +77,16 @@ async def import_reference(
     return jsonable_encoder({"importado": batch is not None, "importacion_id": batch.id if batch else None, "informe": report})
 
 
+@router.get("/template/simple")
+def simple_template(examples: bool = True, _: models.User = Depends(require("ver"))):
+    """Plantilla simple de carga (hoja CARGA, una fila por documento)."""
+    from ..services.template import build_simple_template
+
+    return Response(build_simple_template(examples=examples),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="Plantilla_Simple_Muenra_Vouching.xlsx"'})
+
+
 @router.get("/projects/{project_id}/imports")
 def list_imports(project_id: int, user: models.User = Depends(require("ver")), db: Session = Depends(get_db)):
     p = project_for_user(db, project_id, user)

@@ -33,6 +33,9 @@ DEFAULT_PARAMETERS: dict = {
         "tipo": 5,
         "concepto": 4,
         "moneda": 3,
+        "subtotal": 3,
+        "iva": 3,
+        "retenciones": 2,
     },
 }
 
@@ -48,6 +51,9 @@ PRIORITY_LABELS = {
     "tipo": "Complementaria",
     "concepto": "Complementaria",
     "moneda": "Complementaria",
+    "subtotal": "Complementaria",
+    "iva": "Complementaria",
+    "retenciones": "Complementaria",
 }
 
 CRITERION_LABELS = {
@@ -62,6 +68,9 @@ CRITERION_LABELS = {
     "tipo": "Tipo documental",
     "concepto": "Concepto / descripción",
     "moneda": "Moneda",
+    "subtotal": "Subtotal",
+    "iva": "IVA",
+    "retenciones": "Retenciones",
 }
 
 

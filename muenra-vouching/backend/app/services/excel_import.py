@@ -29,9 +29,9 @@ REFERENCE_COLUMNS: dict[str, list[str]] = {
     "TIPO_DOCUMENTO": ["TIPO_DOCUMENTO", "TIPO_DOC", "TIPO"],
     "NUMERO_DOCUMENTO": ["NUMERO_DOCUMENTO", "NUMERO", "NO_DOCUMENTO", "NUM_DOCUMENTO", "DOCUMENTO", "NRO_DOCUMENTO"],
     "FECHA": ["FECHA", "FECHA_DOCUMENTO", "FECHA_CONTABLE", "FECHA_EMISION"],
-    "TERCERO": ["TERCERO", "NOMBRE_TERCERO", "RAZON_SOCIAL", "PROVEEDOR", "CLIENTE"],
-    "NIT": ["NIT", "NIT_TERCERO", "IDENTIFICACION", "ID_TERCERO"],
-    "VALOR_ESPERADO": ["VALOR_ESPERADO", "VALOR", "VALOR_CONTABLE", "IMPORTE"],
+    "TERCERO": ["TERCERO", "NOMBRE_TERCERO", "RAZON_SOCIAL", "PROVEEDOR", "CLIENTE", "NOMBRE"],
+    "NIT": ["NIT", "NIT_TERCERO", "NIT_IDENTIFICACION", "IDENTIFICACION", "ID_TERCERO", "NIT_CC"],
+    "VALOR_ESPERADO": ["VALOR_ESPERADO", "VALOR_TOTAL", "VALOR", "VALOR_CONTABLE", "IMPORTE", "TOTAL"],
     "MONEDA": ["MONEDA", "DIVISA"],
     "CONTRATO": ["CONTRATO", "NUMERO_CONTRATO"],
     "ORDEN_COMPRA": ["ORDEN_COMPRA", "OC", "NUMERO_OC"],
@@ -39,7 +39,17 @@ REFERENCE_COLUMNS: dict[str, list[str]] = {
     "CENTRO_COSTO": ["CENTRO_COSTO", "CENTRO_DE_COSTO", "CECO"],
     "CUENTA_CONTABLE": ["CUENTA_CONTABLE", "CUENTA"],
     "ARCHIVO_SOPORTE": ["ARCHIVO_SOPORTE", "ARCHIVO", "ARCHIVO_ESPERADO", "SOPORTE"],
+    # Plantilla simple: una sola columna para contrato u orden de compra
+    "CONTRATO_OC": ["CONTRATO_OC", "CONTRATO_U_OC", "CONTRATO_ORDEN_COMPRA", "REFERENCIA"],
+    # Valores esperados complementarios (se comparan como referencia)
+    "SUBTOTAL": ["SUBTOTAL", "SUB_TOTAL", "BASE"],
+    "IVA": ["IVA", "VALOR_IVA"],
+    "RETENCIONES": ["RETENCIONES", "RETENCION", "RETEFUENTE"],
+    "TOLERANCIA_VALOR": ["TOLERANCIA_VALOR", "TOLERANCIA"],
+    "OBSERVACIONES": ["OBSERVACIONES", "OBSERVACION", "NOTAS"],
 }
+# Hojas aceptadas como población cuando no existe REFERENCIA_VOUCHING (plantilla simple)
+REFERENCE_SHEET_ALIASES = ["REFERENCIA_VOUCHING", "CARGA", "POBLACION", "MUESTRA", "DOCUMENTOS"]
 REQUIRED_COLUMNS = ["ID_MUESTRA", "TIPO_DOCUMENTO", "NUMERO_DOCUMENTO", "FECHA", "TERCERO", "NIT", "VALOR_ESPERADO"]
 
 CONFIG_KEYS = {
@@ -102,9 +112,23 @@ def read_workbook(filename: str, data: bytes) -> ParsedWorkbook:
     return wb
 
 
-def _table(rows: list[list]) -> tuple[list[str], list[tuple[int, dict]]]:
-    """Encuentra el encabezado (primera fila no vacía) y devuelve filas como dicts."""
-    header_idx = next((i for i, r in enumerate(rows) if any(c not in (None, "") for c in r)), None)
+def _known_columns(row: list) -> int:
+    keys = {_key(c) for c in row if c not in (None, "")}
+    return sum(1 for aliases in REFERENCE_COLUMNS.values() if keys & set(aliases))
+
+
+def _table(rows: list[list], reference: bool = False) -> tuple[list[str], list[tuple[int, dict]]]:
+    """Devuelve el encabezado y las filas como dicts.
+
+    En la hoja de población el encabezado es la primera fila (de las 30 primeras) con al
+    menos 3 columnas reconocidas, lo que permite títulos e instrucciones encima de la tabla.
+    En las demás hojas es la primera fila no vacía.
+    """
+    header_idx = None
+    if reference:
+        header_idx = next((i for i, r in enumerate(rows[:30]) if _known_columns(r) >= 3), None)
+    if header_idx is None:
+        header_idx = next((i for i, r in enumerate(rows) if any(c not in (None, "") for c in r)), None)
     if header_idx is None:
         return [], []
     header = [_key(c) for c in rows[header_idx]]
@@ -195,6 +219,28 @@ def parse_configuration(rows: list[list]) -> tuple[dict, dict, list[str]]:
     return params, project, warnings
 
 
+def find_reference_sheet(wb: ParsedWorkbook) -> str | None:
+    """Hoja de partidas: por nombre conocido o, si no, la primera con los encabezados obligatorios."""
+    for name in REFERENCE_SHEET_ALIASES:
+        if name in wb.sheets:
+            return name
+    for name, rows in wb.sheets.items():
+        if name in SHEETS:
+            continue
+        header, _ = _table(rows, reference=True)
+        if all(c in _resolve_columns(header) for c in ("ID_MUESTRA", "VALOR_ESPERADO")):
+            return name
+    return None
+
+
+def split_contract_or_order(value: str) -> tuple[str | None, str | None]:
+    """Columna CONTRATO_OC: decide por el prefijo si es contrato u orden de compra."""
+    k = _key(value)
+    if k.startswith(("OC", "ORDEN", "PO", "OS")):
+        return None, value
+    return value, None
+
+
 def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
     """Valida el libro y devuelve (informe de integridad, datos normalizados)."""
     errors: list[str] = []
@@ -204,10 +250,17 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
     normalized: dict = {"references": [], "aliases": [], "types": [], "fields": [], "expected": [], "params": {}, "project": {}}
 
     found = {s: s in wb.sheets for s in SHEETS}
-    if not found["REFERENCIA_VOUCHING"]:
-        errors.append("No existe la hoja obligatoria REFERENCIA_VOUCHING")
+    ref_sheet = find_reference_sheet(wb)
+    if ref_sheet is None:
+        errors.append("No se encontró la hoja de partidas: use REFERENCIA_VOUCHING o CARGA (plantilla simple) con los encabezados de la plantilla")
         return _report(wb, found, errors, warnings, info, row_issues, normalized), normalized
+    found["REFERENCIA_VOUCHING"] = True
+    if ref_sheet != "REFERENCIA_VOUCHING":
+        info.append(f"Partidas leídas de la hoja {ref_sheet} (plantilla simple)")
+    simple = ref_sheet != "REFERENCIA_VOUCHING" and not any(found[x] for x in SHEETS if x != "REFERENCIA_VOUCHING")
     for s, ok in found.items():
+        if simple:
+            break
         if not ok and s != "REFERENCIA_VOUCHING":
             info.append(f"Hoja {s} no encontrada: se usarán valores predeterminados")
 
@@ -218,11 +271,11 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
         errors.extend(f"CONFIGURACION: {e}" for e in perrs)
         normalized["params"], normalized["project"] = params, proj
 
-    header, table = _table(wb.sheets["REFERENCIA_VOUCHING"])
+    header, table = _table(wb.sheets[ref_sheet], reference=True)
     mapping = _resolve_columns(header)
     missing = [c for c in REQUIRED_COLUMNS if c not in mapping]
     if missing:
-        errors.append(f"Columnas obligatorias faltantes en REFERENCIA_VOUCHING: {', '.join(missing)}")
+        errors.append(f"Columnas obligatorias faltantes en {ref_sheet}: {', '.join(missing)}")
         return _report(wb, found, errors, warnings, info, row_issues, normalized, mapping=mapping), normalized
 
     def issue(row, col, msg, level="ADVERTENCIA"):
@@ -265,7 +318,7 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
         elif nit and nit.dv is not None and nit.dv_valid is False:
             issue(rownum, "NIT", f"Dígito de verificación no corresponde al NIT {nit_raw}")
         tipo = _s(g.get("TIPO_DOCUMENTO"))
-        if tipo and normalize_type(tipo) == "OTRO":
+        if tipo and normalize_type(tipo) == "OTRO" and _key(tipo) not in ("OTRO", "OTROS"):
             issue(rownum, "TIPO_DOCUMENTO", f"Tipo documental no reconocido: '{tipo}' (se tratará como OTRO)")
         moneda = (_s(g.get("MONEDA")) or normalized["params"].get("MONEDA_BASE") or DEFAULT_PARAMETERS["MONEDA_BASE"]).upper()
         if len(moneda) != 3:
@@ -273,10 +326,37 @@ def validate_workbook(wb: ParsedWorkbook) -> tuple[dict, dict]:
         bk = ((nit.base if nit else ""), normalize_doc_number(_s(g.get("NUMERO_DOCUMENTO"))), str(value))
         business[bk] += 1
         extra = {k: (v.isoformat() if isinstance(v, (date, datetime)) else v) for k, v in r.items() if k not in mapping.values() and v not in (None, "")}
+        contract, order = _s(g.get("CONTRATO")), _s(g.get("ORDEN_COMPRA"))
+        combined = _s(g.get("CONTRATO_OC"))
+        if combined and not (contract or order):
+            contract, order = split_contract_or_order(combined)
+        for col in ("SUBTOTAL", "IVA", "RETENCIONES"):
+            raw = g.get(col)
+            if raw in (None, ""):
+                continue
+            amt = parse_amount(raw)
+            if amt is None:
+                issue(rownum, col, f"Valor no numérico: '{raw}'")
+            else:
+                extra[col] = str(amt)
+        raw_tol = g.get("TOLERANCIA_VALOR")
+        if raw_tol not in (None, ""):
+            t = _num(raw_tol)
+            if t is not None and t > 1:
+                t = t / 100  # 10 -> 10 %
+            if t is None or not 0 <= t <= 1:
+                issue(rownum, "TOLERANCIA_VALOR", f"Tolerancia inválida: '{raw_tol}' (use 0,10 o 10 %); se aplica la del proyecto")
+            else:
+                extra["TOLERANCIA_VALOR"] = t
+        obs = _s(g.get("OBSERVACIONES"))
+        if obs:
+            extra["OBSERVACIONES"] = obs
+            if _key(obs) in ("EJEMPLO", "FILA_DE_EJEMPLO"):
+                issue(rownum, "OBSERVACIONES", "Fila marcada como EJEMPLO: elimínela si no corresponde a un documento real")
         normalized["references"].append({
             "row_number": rownum, "sample_id": sid, "doc_type": tipo, "doc_number": _s(g.get("NUMERO_DOCUMENTO")),
             "doc_date": d, "third_party": _s(g.get("TERCERO")), "nit": nit_raw, "expected_value": value, "currency": moneda,
-            "contract": _s(g.get("CONTRATO")), "purchase_order": _s(g.get("ORDEN_COMPRA")), "concept": _s(g.get("CONCEPTO")),
+            "contract": contract, "purchase_order": order, "concept": _s(g.get("CONCEPTO")),
             "cost_center": _s(g.get("CENTRO_COSTO")), "account": _s(g.get("CUENTA_CONTABLE")),
             "expected_file": _s(g.get("ARCHIVO_SOPORTE")), "extra": extra,
         })

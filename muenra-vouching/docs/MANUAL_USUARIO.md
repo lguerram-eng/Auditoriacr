@@ -31,7 +31,11 @@ Ingrese su correo y contraseña. Tras 5 intentos fallidos la cuenta se bloquea 1
    - conciliación: registros leídos/válidos y suma de `VALOR_ESPERADO` contra `CONTROL_TOTAL_REGISTROS` / `CONTROL_TOTAL_VALOR`.
 3. **Importar**. Una nueva importación reemplaza la población vigente (queda en el historial).
 
-### Columnas de REFERENCIA_VOUCHING
+### Plantilla simple (recomendada)
+
+Use **Descargar plantilla simple**: una sola hoja `CARGA`, una fila por documento y válida para cualquier tipo documental. Obligatorias: `ID`, `TIPO_DOCUMENTO`, `NUMERO_DOCUMENTO`, `FECHA_DOCUMENTO`, `NOMBRE_TERCERO`, `NIT_IDENTIFICACION` y `VALOR_TOTAL`. Opcionales: `CONCEPTO`, `SUBTOTAL`, `IVA`, `RETENCIONES` (se comparan como referencia, sin cambiar el estado), `MONEDA`, `CONTRATO_OC` (prefijo `OC`/`ORDEN` = orden de compra; en otro caso, contrato), `ARCHIVO_ESPERADO`, `TOLERANCIA_VALOR` (tolerancia propia de la fila: 0,10 o 10 %) y `OBSERVACIONES`. Borre las filas amarillas de ejemplo antes de importar.
+
+### Columnas de REFERENCIA_VOUCHING (plantilla completa)
 
 | Columna | Obligatoria | Ejemplo |
 |---|---|---|

@@ -65,7 +65,7 @@ Guía completa: [docs/INSTALACION.md](docs/INSTALACION.md).
 
 | Requisito | Implementación |
 |---|---|
-| Carga de población desde Excel | Hojas `CONFIGURACION`, `REFERENCIA_VOUCHING`, `ENTIDADES_ALIAS`, `TIPOS_DOCUMENTO`, `CAMPOS_EXTRACCION`, `RESULTADO_ESPERADO` (por nombre, sin distinguir mayúsculas). También XLS y CSV. |
+| Carga de población desde Excel | **Plantilla simple** (hoja `CARGA`, una fila por documento, cualquier tipo) o plantilla completa con las hojas `CONFIGURACION`, `REFERENCIA_VOUCHING`, `ENTIDADES_ALIAS`, `TIPOS_DOCUMENTO`, `CAMPOS_EXTRACCION`, `RESULTADO_ESPERADO` (por nombre, sin distinguir mayúsculas). También XLS y CSV. |
 | Validación previa | Columnas obligatorias, ID duplicados, partidas repetidas, fechas inválidas, valores vacíos, tipos de dato, DV del NIT, conciliación de registros y de la suma de `VALOR_ESPERADO` contra totales de control → **informe de integridad** (validación en seco antes de importar). |
 | Carga masiva | Arrastrar y soltar archivos o carpetas; lotes de 20; validación de tipo real, tamaño, contenido activo y antivirus; SHA-256; cifrado en reposo. |
 | Lectura | 1) XML determinístico (UBL 2.1 DIAN, incluido `AttachedDocument`); 2) PDF con texto (coordenadas por palabra); 3) PDF escaneado / PNG / JPG / TIFF con OCR Tesseract; 4) DOCX; 5) IA opcional para completar campos faltantes. |
@@ -143,7 +143,7 @@ muenra-vouching/
 │   │       └── extraction/       · xml_extractor, readers (PDF/OCR/imagen/DOCX), fields, classifier, llm, pipeline
 │   ├── migrations/               · Alembic (0001 esquema inicial)
 │   ├── demo/generate_demo.py     · generador de datos ficticios (Excel + PDF/XML/PNG/TIFF/JPG/DOCX)
-│   └── tests/                    · 125 pruebas (unitarias, integración, extremo a extremo)
+│   └── tests/                    · 133 pruebas (unitarias, integración, extremo a extremo)
 ├── frontend/
 │   ├── Dockerfile · nginx.conf · index.html · css/app.css · img/
 │   └── js/                       · app.js (enrutador), api.js, ui.js, i18n.js, views/ (14 pantallas)
@@ -155,6 +155,31 @@ muenra-vouching/
 
 ## Formato del Excel de referencia
 
+Se aceptan dos formatos. La aplicación detecta automáticamente cuál se cargó.
+
+### Plantilla simple (recomendada): una hoja, una fila por documento
+
+Hoja **CARGA**, con título e instrucciones arriba y los encabezados en la fila 4. Sirve para cualquier tipo documental (FACTURA, FE, RC, CE, CONTRATO, ORDEN_COMPRA, CUENTA_COBRO, notas, OTRO…). Descárguela desde **Importar Excel → Descargar plantilla simple** o use [`demo/Plantilla_Simple_Muenra_Vouching.xlsx`](demo/Plantilla_Simple_Muenra_Vouching.xlsx).
+
+| Columna | Obligatoria | Uso |
+|---|---|---|
+| ID | Sí | Identificador único de la fila |
+| TIPO_DOCUMENTO | Sí | Lista desplegable; `OTRO` para cualquier documento |
+| NUMERO_DOCUMENTO | Sí | Número del soporte |
+| FECHA_DOCUMENTO | Sí | Fecha del soporte |
+| NOMBRE_TERCERO | Sí | Razón social o nombre |
+| NIT_IDENTIFICACION | Sí | NIT (con o sin DV) o cédula |
+| VALOR_TOTAL | Sí | Valor esperado que se compara con el documento |
+| CONCEPTO | No | Descripción |
+| SUBTOTAL / IVA / RETENCIONES | No | Se comparan como referencia (informativo: no cambian el estado) |
+| MONEDA | No | COP por defecto |
+| CONTRATO_OC | No | Si empieza por `OC`/`ORDEN` se trata como orden de compra; si no, como contrato |
+| ARCHIVO_ESPERADO | No | Nombre del archivo soporte (refuerza la relación) |
+| TOLERANCIA_VALOR | No | Tolerancia de **esa fila** (0,10 o 10 %); vacía = la del proyecto |
+| OBSERVACIONES | No | Notas; las filas marcadas `EJEMPLO` generan advertencia |
+
+### Plantilla completa (6 hojas)
+
 La hoja **REFERENCIA_VOUCHING** es obligatoria. Columnas obligatorias: `ID_MUESTRA`, `TIPO_DOCUMENTO`, `NUMERO_DOCUMENTO`, `FECHA`, `TERCERO`, `NIT`, `VALOR_ESPERADO`. Opcionales: `MONEDA`, `CONTRATO`, `ORDEN_COMPRA`, `CONCEPTO`, `CENTRO_COSTO`, `CUENTA_CONTABLE`, `ARCHIVO_SOPORTE`. Se aceptan alias de encabezado (p. ej. `VALOR`, `OC`, `DESCRIPCION`).
 
 | Hoja | Contenido |
@@ -165,7 +190,7 @@ La hoja **REFERENCIA_VOUCHING** es obligatoria. Columnas obligatorias: `ID_MUEST
 | CAMPOS_EXTRACCION | `CAMPO`, `DESCRIPCION`, `OBLIGATORIO`, `TIPO_DATO`, `TIPOS_DOCUMENTO`. |
 | RESULTADO_ESPERADO | `ID_MUESTRA`, `ESTADO_ESPERADO`, `ARCHIVO`, `OBSERVACION` — el sistema calcula la precisión del motor contra este control. |
 
-Ejemplo completo: [`demo/referencia_vouching_demo.xlsx`](demo/referencia_vouching_demo.xlsx). Especificación: [docs/MANUAL_USUARIO.md](docs/MANUAL_USUARIO.md#4-importar-el-excel-de-referencia).
+Ejemplos: [`demo/plantilla_simple_demo.xlsx`](demo/plantilla_simple_demo.xlsx) (simple) y [`demo/referencia_vouching_demo.xlsx`](demo/referencia_vouching_demo.xlsx). Especificación: [docs/MANUAL_USUARIO.md](docs/MANUAL_USUARIO.md#4-importar-el-excel-de-referencia).
 
 ---
 
@@ -221,9 +246,10 @@ MUENRA_TEST_DATABASE_URL=postgresql+psycopg://usuario@localhost:5432/muenra_test
 | `test_import.py` | Hojas, columnas obligatorias, duplicados, fechas inválidas, vacíos, tipos, totales de control, CSV, validación en seco |
 | `test_matching.py` | Duplicados, múltiples soportes, documento compartido sin duplicar valor, NIT contradictorio, XML+PDF, fechas, moneda, OCR baja, ilegibles, revisión persistente, inyección de fórmulas |
 | `test_security.py` | Permisos por rol, aislamiento por proyecto, bloqueo, recuperación, archivos maliciosos, cifrado en reposo, enmascaramiento, cabeceras |
+| `test_simple_template.py` | Plantilla simple: diseño, encabezado en la fila 4, alias de columnas, CONTRATO_OC, tolerancia por fila, cualquier tipo documental y recorrido completo con resultado idéntico |
 | `test_end_to_end.py` | Escenario ficticio completo vía API: 17 partidas y 21 documentos → estados = `RESULTADO_ESPERADO` (100 %), conciliación, revisión humana y exportación |
 
-Resultado actual: **125 pruebas aprobadas** en SQLite y en PostgreSQL 16.
+Resultado actual: **133 pruebas aprobadas** en SQLite y en PostgreSQL 16.
 
 ---
 

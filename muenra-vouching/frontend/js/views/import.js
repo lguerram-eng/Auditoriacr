@@ -1,5 +1,5 @@
 // Pantalla 4: importación del Excel de referencia con informe de integridad.
-import { api } from '../api.js';
+import { api, download } from '../api.js';
 import { clear, fmt, h, toast } from '../ui.js';
 
 export async function render(ctx) {
@@ -15,7 +15,7 @@ export async function render(ctx) {
     ondragover: (e) => { e.preventDefault(); drop.classList.add('over'); }, ondragleave: () => drop.classList.remove('over'),
     ondrop: (e) => { e.preventDefault(); drop.classList.remove('over'); pick(e.dataTransfer.files[0]); } },
   h('div', { class: 'big' }, '📊'), h('div', null, h('b', null, 'Arrastre aquí el Excel de referencia'), ' o haga clic para seleccionarlo'),
-  h('div', { class: 'small muted' }, 'Hojas: CONFIGURACION, REFERENCIA_VOUCHING (obligatoria), ENTIDADES_ALIAS, TIPOS_DOCUMENTO, CAMPOS_EXTRACCION, RESULTADO_ESPERADO · También CSV'), name, input);
+  h('div', { class: 'small muted' }, 'Plantilla simple: hoja CARGA, una fila por documento (cualquier tipo). Plantilla completa: REFERENCIA_VOUCHING + CONFIGURACION, ENTIDADES_ALIAS, TIPOS_DOCUMENTO, CAMPOS_EXTRACCION, RESULTADO_ESPERADO. También CSV.'), name, input);
 
   const send = async (dry) => {
     if (!file) { toast('Seleccione un archivo', 'bad'); return; }
@@ -48,6 +48,7 @@ export async function render(ctx) {
       h('div', { class: 'btn-row', style: { marginTop: '14px' } },
         h('button', { class: 'btn', onclick: () => send(true) }, '1. Validar integridad'),
         h('button', { class: 'btn primary', onclick: () => send(false) }, '2. Importar'),
+        h('button', { class: 'btn ghost', onclick: () => download('/template/simple') }, '⤓ Descargar plantilla simple'),
         h('span', { class: 'small muted' }, 'Una nueva importación reemplaza la población vigente del proyecto (queda registrada en la auditoría).'))),
     reportCard,
     h('div', { class: 'card' }, h('h2', null, 'Historial de importaciones'), history));
