@@ -5,7 +5,7 @@ import io
 import json
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
@@ -251,7 +251,7 @@ def document_detail(document_id: int, request: Request, user: models.User = Depe
 
 
 @router.get("/documents/{document_id}/pages/{page}/image")
-def page_image(document_id: int, page: int, user: models.User = Depends(require("ver")), db: Session = Depends(get_db)):
+def page_image(document_id: int, page: int = Path(..., ge=1, le=10000), user: models.User = Depends(require("ver")), db: Session = Depends(get_db)):
     from PIL import Image
 
     from ..services.extraction.readers import image_frames, render_pdf_page

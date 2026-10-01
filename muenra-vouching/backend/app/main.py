@@ -90,8 +90,8 @@ def create_app() -> FastAPI:
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if not request.url.path.startswith("/api/docs") and not request.url.path.startswith("/api/redoc"):
             response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+                "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; "
+                "font-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'"
             )
         if s.is_production:
             response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"

@@ -222,7 +222,10 @@ pre.json { background: #0f1b2c; color: #d6e2f3; padding: 12px; border-radius: 8p
   .sidebar:not(.open) .nav, .sidebar:not(.open) .sidebar-foot { display: none; }
   .menu-toggle { display: inline-flex; }
   .topbar { flex-wrap: wrap; padding: 10px 16px; }
-  .topbar .user-chip > div:last-child { display: none; }
+  .topbar .user-chip > div:last-child, .topbar .crumbs { display: none; }
+  .topbar { justify-content: space-between; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi .value { font-size: 18px; }
   .content { padding: 16px; }
   .viewer, .grid-2, .grid-3, .form-grid, .login-wrap { grid-template-columns: 1fr; }
   .doc-pane { position: static; max-height: none; }
